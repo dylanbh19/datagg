@@ -1,0 +1,21 @@
+Georgeson Intelligent Proxy-Analytics Platform — What It Delivers
+	•	Single Source of Truth for Voting Data
+Consolidates share-register snapshots, live proxy ballots, investor voting histories and advisor recommendations into one governed data hub, eliminating spreadsheet silos and version confusion.
+	•	Automatic “Who-Owns-What” Clarity
+AI-driven entity-resolution maps every nominee account to its true institutional owner with audit-grade confidence, replacing manual alias spreadsheets and cutting hours from each reconciliation cycle.
+	•	Early-Warning Vote Forecasts
+Machine-learning models predict how—and whether—the top 20 global investors will vote on every resolution weeks before record date, letting engagement teams focus outreach where it moves the dial.
+	•	Live Turn-Out & Exception Alerts
+Streaming reconciliation tracks ballots as they land; the moment a large block is missing or mis-voted the platform pings analysts and corporate-secretary teams, enabling recovery before the poll closes.
+	•	One-Click Regulatory Compliance
+Generates and transmits SRD II vote-confirmation messages automatically, posts immutable logs for auditors, and monitors confirmation-delivery SLAs—removing last-minute manual formatting and email chains.
+	•	Actionable Insight for Boards & IR
+Dashboards show pass-/fail likelihood by resolution, shareholder influence simulations (“if Vanguard flips, outcome = X”), and post-meeting scorecards on stewardship engagement effectiveness.
+	•	Transparent, Explainable Decisions
+Every prediction is accompanied by confidence scores and feature drivers (e.g., “historical pattern + ISS ‘against’ recommendation”), giving clients and regulators clear reasoning, not black-box answers.
+	•	Scales with Busy Season, Shrinks When Quiet
+Cloud-native architecture auto-scales for AGM peaks yet runs cost-light the rest of the year, supporting dozens of issuers without additional head-count.
+	•	Future-Proof Data Foundation
+Open data formats and modular APIs make it straightforward to add new markets, custodians or ESG datasets as regulations and client needs evolve.
+	•	Competitive Edge for Georgeson
+Transforms proxy solicitation from reactive trouble-shooting to proactive, data-led stewardship advice—differentiating Georgeson in a crowded market and deepening strategic relationships with issuers.

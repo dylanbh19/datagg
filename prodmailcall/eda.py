@@ -1,9 +1,25 @@
+# #!/usr/bin/env python3
+“””
+Call Volume Time Series Analysis Script
+
+This script performs comprehensive analysis of call volume data in relation to mail campaigns.
+Configure your file paths and column mappings in the CONFIGURATION section below.
+
+All outputs (plots, reports, data) will be saved to the specified output directory.
+“””
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
 import warnings
+import os
+import sys
+from pathlib import Path
+import logging
+from typing import Dict, List, Optional, Tuple
+import traceback
 warnings.filterwarnings(‘ignore’)
 
 # Statistical libraries
@@ -12,102 +28,437 @@ from scipy import stats
 from scipy.stats import pearsonr, spearmanr
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
-from sklearn.cluster import DBSCAN
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# Time series libraries
+# =============================================================================
 
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
+# CONFIGURATION SECTION - MODIFY THESE PATHS AND SETTINGS
 
-class CallVolumeAnalyzer:
-def **init**(self):
-self.call_data = None
-self.mail_data = None
-self.combined_data = None
-self.outliers_removed = False
+# =============================================================================
+
+CONFIG = {
+# === FILE PATHS ===
+‘MAIL_FILE_PATH’: r’C:\path\to\your\mail_data.csv’,        # UPDATE THIS PATH
+‘CALL_FILE_PATH’: r’C:\path\to\your\call_data.csv’,        # UPDATE THIS PATH
+‘OUTPUT_DIR’: r’C:\path\to\output\results’,                # UPDATE THIS PATH
 
 ```
-def load_and_aggregate_calls(self, call_file_path, date_col='date', volume_col='calls'):
-    """
-    Load call data and aggregate by date
-    """
-    print("Loading and aggregating call data...")
-    
-    # Load call data
-    if call_file_path.endswith('.csv'):
-        df = pd.read_csv(call_file_path)
-    elif call_file_path.endswith(('.xlsx', '.xls')):
-        df = pd.read_excel(call_file_path)
-    
-    # Convert date column to datetime
-    df[date_col] = pd.to_datetime(df[date_col])
-    
-    # Aggregate calls by date
-    self.call_data = df.groupby(date_col)[volume_col].sum().reset_index()
-    self.call_data.columns = ['date', 'call_volume']
-    self.call_data = self.call_data.sort_values('date').reset_index(drop=True)
-    
-    print(f"Call data loaded: {len(self.call_data)} unique dates")
-    print(f"Date range: {self.call_data['date'].min()} to {self.call_data['date'].max()}")
-    print(f"Total calls: {self.call_data['call_volume'].sum():,}")
-    
-    return self.call_data
+# === MAIL DATA COLUMN MAPPING ===
+'MAIL_COLUMNS': {
+    'date': 'date',              # Date column name in your mail file
+    'volume': 'volume',          # Volume/quantity column name
+    'type': 'mail_type',         # Mail type column name (for legend)
+    'source': 'source'           # Source column (optional)
+},
 
-def load_and_aggregate_mail(self, mail_files, date_col='date', volume_col='mail_volume'):
-    """
-    Load multiple mail files and aggregate by date
-    mail_files can be a single file path or list of file paths
-    """
-    print("Loading and aggregating mail data...")
-    
-    if isinstance(mail_files, str):
-        mail_files = [mail_files]
-    
-    all_mail_data = []
-    
-    for file_path in mail_files:
-        print(f"Processing: {file_path}")
-        
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-        elif file_path.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(file_path)
-        
-        # Convert date column to datetime
-        df[date_col] = pd.to_datetime(df[date_col])
-        
-        # If volume column doesn't exist, try common variations
-        if volume_col not in df.columns:
-            possible_cols = ['volume', 'mail', 'pieces', 'count', 'quantity']
-            for col in possible_cols:
-                if col in df.columns:
-                    df = df.rename(columns={col: volume_col})
-                    break
-        
-        all_mail_data.append(df[[date_col, volume_col]])
-    
-    # Combine all mail data
-    combined_mail = pd.concat(all_mail_data, ignore_index=True)
-    
-    # Aggregate by date across all sources
-    self.mail_data = combined_mail.groupby(date_col)[volume_col].sum().reset_index()
-    self.mail_data.columns = ['date', 'mail_volume']
-    self.mail_data = self.mail_data.sort_values('date').reset_index(drop=True)
-    
-    print(f"Mail data loaded: {len(self.mail_data)} unique dates")
-    print(f"Date range: {self.mail_data['date'].min()} to {self.mail_data['date'].max()}")
-    print(f"Total mail pieces: {self.mail_data['mail_volume'].sum():,}")
-    
-    return self.mail_data
+# === CALL DATA COLUMN MAPPING ===
+'CALL_COLUMNS': {
+    'date': 'date',              # Date column name in your call file
+    'volume': 'call_volume'      # Call volume column name
+},
 
-def detect_outliers_multiple_methods(self, data, column):
-    """
-    Detect outliers using multiple methods and return consensus
-    """
+# === ANALYSIS SETTINGS ===
+'REMOVE_OUTLIERS': True,         # Remove outliers from analysis
+'MAX_LAG_DAYS': 21,             # Maximum lag days to test
+'MIN_OVERLAP_RECORDS': 10,       # Minimum overlapping records needed
+'MAX_RESPONSE_RATE': 50,         # Maximum realistic response rate (%)
+
+# === PLOT SETTINGS ===
+'PLOT_STYLE': 'seaborn-v0_8',   # Matplotlib style
+'FIGURE_SIZE': (15, 10),        # Default figure size
+'DPI': 300,                     # Plot resolution
+'FONT_SIZE': 12,                # Default font size
+
+# === DATA SETTINGS ===
+'DATE_FORMAT': None,            # Date format (None for auto-detection)
+'DECIMAL_PLACES': 2,            # Decimal places for metrics
+```
+
+}
+
+# =============================================================================
+
+# LOGGING SETUP
+
+# =============================================================================
+
+def setup_logging(output_dir: str) -> logging.Logger:
+“”“Setup comprehensive logging to both file and console”””
+
+```
+# Create output directory
+os.makedirs(output_dir, exist_ok=True)
+
+# Create logger
+logger = logging.getLogger('CallVolumeAnalysis')
+logger.setLevel(logging.DEBUG)
+
+# Clear existing handlers
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Create formatters
+file_formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+
+# File handler
+log_file = os.path.join(output_dir, f'analysis_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
+file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
+
+return logger
+```
+
+# =============================================================================
+
+# MAIN ANALYSIS CLASS
+
+# =============================================================================
+
+class CallVolumeAnalyzer:
+def **init**(self, config: Dict, logger: logging.Logger):
+self.config = config
+self.logger = logger
+self.mail_data = None
+self.call_data = None
+self.mail_data_clean = None
+self.call_data_clean = None
+self.combined_data = None
+self.analysis_results = {}
+
+```
+    # Create output directories
+    self.plots_dir = os.path.join(config['OUTPUT_DIR'], 'plots')
+    self.data_dir = os.path.join(config['OUTPUT_DIR'], 'data')
+    self.reports_dir = os.path.join(config['OUTPUT_DIR'], 'reports')
+    
+    for dir_path in [self.plots_dir, self.data_dir, self.reports_dir]:
+        os.makedirs(dir_path, exist_ok=True)
+    
+    # Set plot style
+    try:
+        plt.style.use(config['PLOT_STYLE'])
+    except:
+        plt.style.use('default')
+        self.logger.warning(f"Could not set plot style {config['PLOT_STYLE']}, using default")
+    
+    # Set font size
+    plt.rcParams.update({'font.size': config['FONT_SIZE']})
+
+def run_complete_analysis(self) -> bool:
+    """Run the complete analysis pipeline"""
+    
+    self.logger.info("=" * 80)
+    self.logger.info("CALL VOLUME TIME SERIES ANALYSIS - STARTING")
+    self.logger.info("=" * 80)
+    self.logger.info(f"Output directory: {self.config['OUTPUT_DIR']}")
+    self.logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    try:
+        # Step 1: Load data
+        if not self._load_data():
+            return False
+        
+        # Step 2: Process data
+        if not self._process_data():
+            return False
+        
+        # Step 3: Clean data
+        if not self._clean_data():
+            return False
+        
+        # Step 4: Analyze correlations
+        if not self._analyze_correlations():
+            return False
+        
+        # Step 5: Create plots
+        if not self._create_all_plots():
+            return False
+        
+        # Step 6: Generate reports
+        if not self._generate_reports():
+            return False
+        
+        # Step 7: Save processed data
+        if not self._save_processed_data():
+            return False
+        
+        self.logger.info("=" * 80)
+        self.logger.info("ANALYSIS COMPLETED SUCCESSFULLY")
+        self.logger.info("=" * 80)
+        self.logger.info(f"Check output directory: {self.config['OUTPUT_DIR']}")
+        
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Analysis failed: {str(e)}")
+        self.logger.error(traceback.format_exc())
+        return False
+
+def _load_data(self) -> bool:
+    """Load mail and call data files"""
+    
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 1: LOADING DATA")
+    self.logger.info("=" * 60)
+    
+    try:
+        # Load mail data
+        self.logger.info(f"Loading mail data from: {self.config['MAIL_FILE_PATH']}")
+        
+        if not os.path.exists(self.config['MAIL_FILE_PATH']):
+            raise FileNotFoundError(f"Mail file not found: {self.config['MAIL_FILE_PATH']}")
+        
+        if self.config['MAIL_FILE_PATH'].lower().endswith('.csv'):
+            self.mail_data = pd.read_csv(self.config['MAIL_FILE_PATH'])
+        elif self.config['MAIL_FILE_PATH'].lower().endswith(('.xlsx', '.xls')):
+            self.mail_data = pd.read_excel(self.config['MAIL_FILE_PATH'])
+        else:
+            raise ValueError("Mail file must be CSV or Excel format")
+        
+        self.logger.info(f"✓ Mail data loaded: {len(self.mail_data):,} rows, {len(self.mail_data.columns)} columns")
+        self.logger.info(f"  Columns: {list(self.mail_data.columns)}")
+        
+        # Load call data
+        self.logger.info(f"Loading call data from: {self.config['CALL_FILE_PATH']}")
+        
+        if not os.path.exists(self.config['CALL_FILE_PATH']):
+            raise FileNotFoundError(f"Call file not found: {self.config['CALL_FILE_PATH']}")
+        
+        if self.config['CALL_FILE_PATH'].lower().endswith('.csv'):
+            self.call_data = pd.read_csv(self.config['CALL_FILE_PATH'])
+        elif self.config['CALL_FILE_PATH'].lower().endswith(('.xlsx', '.xls')):
+            self.call_data = pd.read_excel(self.config['CALL_FILE_PATH'])
+        else:
+            raise ValueError("Call file must be CSV or Excel format")
+        
+        self.logger.info(f"✓ Call data loaded: {len(self.call_data):,} rows, {len(self.call_data.columns)} columns")
+        self.logger.info(f"  Columns: {list(self.call_data.columns)}")
+        
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error loading data: {str(e)}")
+        return False
+
+def _process_data(self) -> bool:
+    """Process and validate both datasets"""
+    
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 2: PROCESSING DATA")
+    self.logger.info("=" * 60)
+    
+    try:
+        # Process mail data
+        self.logger.info("Processing mail data...")
+        
+        # Map mail columns
+        mail_mapping = self._map_columns(self.mail_data, self.config['MAIL_COLUMNS'], 'mail')
+        if mail_mapping:
+            self.mail_data = self.mail_data.rename(columns=mail_mapping)
+        
+        # Validate required columns
+        if 'date' not in self.mail_data.columns:
+            raise ValueError("Date column not found in mail data")
+        if 'volume' not in self.mail_data.columns:
+            raise ValueError("Volume column not found in mail data")
+        
+        # Process dates and volumes
+        self.mail_data = self._process_dates_and_volumes(self.mail_data, 'mail')
+        
+        # Aggregate mail data
+        self.mail_data_agg = self._aggregate_mail_data()
+        
+        # Process call data
+        self.logger.info("Processing call data...")
+        
+        # Map call columns
+        call_mapping = self._map_columns(self.call_data, self.config['CALL_COLUMNS'], 'call')
+        if call_mapping:
+            self.call_data = self.call_data.rename(columns=call_mapping)
+        
+        # Validate required columns
+        if 'date' not in self.call_data.columns:
+            raise ValueError("Date column not found in call data")
+        if 'volume' not in self.call_data.columns:
+            raise ValueError("Volume column not found in call data")
+        
+        # Process dates and volumes
+        self.call_data = self._process_dates_and_volumes(self.call_data, 'call')
+        
+        # Aggregate call data
+        self.call_data_agg = self.call_data.groupby('date')['volume'].sum().reset_index()
+        
+        # Log results
+        self.logger.info(f"✓ Mail data processed: {len(self.mail_data_agg):,} unique dates")
+        self.logger.info(f"  Date range: {self.mail_data_agg['date'].min()} to {self.mail_data_agg['date'].max()}")
+        self.logger.info(f"  Total volume: {self.mail_data_agg['volume'].sum():,}")
+        
+        self.logger.info(f"✓ Call data processed: {len(self.call_data_agg):,} unique dates")
+        self.logger.info(f"  Date range: {self.call_data_agg['date'].min()} to {self.call_data_agg['date'].max()}")
+        self.logger.info(f"  Total volume: {self.call_data_agg['volume'].sum():,}")
+        
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error processing data: {str(e)}")
+        return False
+
+def _map_columns(self, data: pd.DataFrame, column_config: Dict, data_type: str) -> Dict:
+    """Map column names based on configuration"""
+    
+    mapping = {}
+    for standard_name, config_name in column_config.items():
+        if config_name in data.columns:
+            if config_name != standard_name:
+                mapping[config_name] = standard_name
+        else:
+            # Try fuzzy matching
+            similar_cols = [col for col in data.columns 
+                          if config_name.lower() in col.lower() or col.lower() in config_name.lower()]
+            if similar_cols:
+                mapping[similar_cols[0]] = standard_name
+                self.logger.warning(f"Using '{similar_cols[0]}' for '{standard_name}' in {data_type} data")
+            elif standard_name in ['date', 'volume']:  # Required columns
+                self.logger.warning(f"Required column '{config_name}' not found in {data_type} data")
+    
+    if mapping:
+        self.logger.info(f"Column mapping for {data_type} data: {mapping}")
+    
+    return mapping
+
+def _process_dates_and_volumes(self, data: pd.DataFrame, data_type: str) -> pd.DataFrame:
+    """Process date and volume columns"""
+    
+    # Convert dates
+    if self.config['DATE_FORMAT']:
+        data['date'] = pd.to_datetime(data['date'], format=self.config['DATE_FORMAT'], errors='coerce')
+    else:
+        data['date'] = pd.to_datetime(data['date'], errors='coerce')
+    
+    # Check for invalid dates
+    invalid_dates = data['date'].isnull().sum()
+    if invalid_dates > 0:
+        self.logger.warning(f"Found {invalid_dates:,} invalid dates in {data_type} data")
+        data = data.dropna(subset=['date'])
+    
+    # Convert volumes to numeric
+    data['volume'] = pd.to_numeric(data['volume'], errors='coerce')
+    invalid_volumes = data['volume'].isnull().sum()
+    if invalid_volumes > 0:
+        self.logger.warning(f"Found {invalid_volumes:,} invalid volumes in {data_type} data")
+        data = data.dropna(subset=['volume'])
+    
+    # Check for negative volumes
+    negative_volumes = (data['volume'] < 0).sum()
+    if negative_volumes > 0:
+        self.logger.warning(f"Found {negative_volumes:,} negative volumes in {data_type} data")
+        data = data[data['volume'] >= 0]
+    
+    return data
+
+def _aggregate_mail_data(self) -> pd.DataFrame:
+    """Aggregate mail data by date and preserve type information"""
+    
+    # Store original data with types for plotting
+    self.mail_data_with_types = self.mail_data.copy()
+    
+    # Aggregate by date
+    if 'type' in self.mail_data.columns:
+        agg_data = self.mail_data.groupby('date').agg({
+            'volume': 'sum',
+            'type': lambda x: '|'.join(x.astype(str).unique())
+        }).reset_index()
+        agg_data.columns = ['date', 'volume', 'types_combined']
+        
+        # Log type information
+        type_counts = self.mail_data['type'].value_counts()
+        self.logger.info(f"Mail types found: {len(type_counts)}")
+        for mail_type, count in type_counts.head(10).items():
+            self.logger.info(f"  {mail_type}: {count:,} records")
+            
+    else:
+        agg_data = self.mail_data.groupby('date')['volume'].sum().reset_index()
+        self.logger.info("No mail type column found")
+    
+    return agg_data
+
+def _clean_data(self) -> bool:
+    """Clean data by detecting and optionally removing outliers"""
+    
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 3: CLEANING DATA")
+    self.logger.info("=" * 60)
+    
+    try:
+        # Analyze mail data outliers
+        self.logger.info("Analyzing mail data outliers...")
+        mail_outliers = self._detect_outliers(self.mail_data_agg, 'volume')
+        
+        self.logger.info(f"Mail outliers detected: {mail_outliers.sum():,} ({mail_outliers.sum()/len(self.mail_data_agg)*100:.1f}%)")
+        
+        if mail_outliers.sum() > 0:
+            outlier_data = self.mail_data_agg[mail_outliers].nlargest(5, 'volume')
+            self.logger.info("Top 5 mail volume outliers:")
+            for _, row in outlier_data.iterrows():
+                self.logger.info(f"  {row['date'].strftime('%Y-%m-%d')}: {row['volume']:,}")
+        
+        # Clean mail data
+        if self.config['REMOVE_OUTLIERS'] and mail_outliers.sum() > 0:
+            self.mail_data_clean = self.mail_data_agg[~mail_outliers].reset_index(drop=True)
+            self.logger.info(f"✓ Removed {mail_outliers.sum():,} mail outliers")
+        else:
+            self.mail_data_clean = self.mail_data_agg.copy()
+            self.logger.info("✓ No mail outliers removed")
+        
+        # Analyze call data outliers
+        self.logger.info("Analyzing call data outliers...")
+        call_outliers = self._detect_outliers(self.call_data_agg, 'volume')
+        
+        self.logger.info(f"Call outliers detected: {call_outliers.sum():,} ({call_outliers.sum()/len(self.call_data_agg)*100:.1f}%)")
+        
+        if call_outliers.sum() > 0:
+            outlier_data = self.call_data_agg[call_outliers].nlargest(5, 'volume')
+            self.logger.info("Top 5 call volume outliers:")
+            for _, row in outlier_data.iterrows():
+                self.logger.info(f"  {row['date'].strftime('%Y-%m-%d')}: {row['volume']:,}")
+        
+        # Clean call data
+        if self.config['REMOVE_OUTLIERS'] and call_outliers.sum() > 0:
+            self.call_data_clean = self.call_data_agg[~call_outliers].reset_index(drop=True)
+            self.logger.info(f"✓ Removed {call_outliers.sum():,} call outliers")
+        else:
+            self.call_data_clean = self.call_data_agg.copy()
+            self.logger.info("✓ No call outliers removed")
+        
+        # Final statistics
+        self.logger.info(f"Final clean datasets:")
+        self.logger.info(f"  Mail data: {len(self.mail_data_clean):,} records")
+        self.logger.info(f"  Call data: {len(self.call_data_clean):,} records")
+        
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error cleaning data: {str(e)}")
+        return False
+
+def _detect_outliers(self, data: pd.DataFrame, column: str) -> pd.Series:
+    """Detect outliers using multiple methods"""
+    
     outliers = pd.DataFrame(index=data.index)
     
-    # Method 1: IQR
+    # IQR method
     Q1 = data[column].quantile(0.25)
     Q3 = data[column].quantile(0.75)
     IQR = Q3 - Q1
@@ -115,1108 +466,778 @@ def detect_outliers_multiple_methods(self, data, column):
     upper_bound = Q3 + 1.5 * IQR
     outliers['iqr'] = (data[column] < lower_bound) | (data[column] > upper_bound)
     
-    # Method 2: Z-score
+    # Z-score method
     z_scores = np.abs(stats.zscore(data[column]))
     outliers['zscore'] = z_scores > 3
     
-    # Method 3: Modified Z-score (using median)
+    # Modified Z-score method
     median = data[column].median()
     mad = np.median(np.abs(data[column] - median))
-    modified_z_scores = 0.6745 * (data[column] - median) / mad
-    outliers['modified_zscore'] = np.abs(modified_z_scores) > 3.5
+    if mad > 0:
+        modified_z_scores = 0.6745 * (data[column] - median) / mad
+        outliers['modified_zscore'] = np.abs(modified_z_scores) > 3.5
+    else:
+        outliers['modified_zscore'] = False
     
-    # Method 4: Isolation Forest
-    iso_forest = IsolationForest(contamination=0.05, random_state=42)
-    outliers['isolation'] = iso_forest.fit_predict(data[[column]].values) == -1
+    # Isolation Forest method
+    try:
+        iso_forest = IsolationForest(contamination=0.05, random_state=42)
+        outliers['isolation'] = iso_forest.fit_predict(data[[column]].values) == -1
+    except:
+        outliers['isolation'] = False
     
     # Consensus: outlier if detected by at least 2 methods
-    outliers['consensus'] = outliers.sum(axis=1) >= 2
-    
-    return outliers['consensus']
+    return outliers.sum(axis=1) >= 2
 
-def perform_call_eda(self, remove_outliers=True):
-    """
-    Comprehensive EDA for call data
-    """
-    print("\n" + "="*50)
-    print("CALL DATA - EXPLORATORY DATA ANALYSIS")
-    print("="*50)
+def _analyze_correlations(self) -> bool:
+    """Analyze correlations and find optimal lag"""
     
-    data = self.call_data.copy()
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 4: CORRELATION ANALYSIS")
+    self.logger.info("=" * 60)
     
-    # Basic statistics
-    print("\nBASIC STATISTICS:")
-    print(f"Total observations: {len(data)}")
-    print(f"Date range: {data['date'].min()} to {data['date'].max()}")
-    print(f"Duration: {(data['date'].max() - data['date'].min()).days} days")
-    print("\nCall Volume Statistics:")
-    print(data['call_volume'].describe())
-    
-    # Check for missing dates
-    date_range = pd.date_range(start=data['date'].min(), end=data['date'].max())
-    missing_dates = set(date_range) - set(data['date'])
-    print(f"\nMissing dates: {len(missing_dates)}")
-    if len(missing_dates) > 0 and len(missing_dates) <= 10:
-        print("Missing dates:", sorted(missing_dates))
-    
-    # Outlier detection
-    outliers = self.detect_outliers_multiple_methods(data, 'call_volume')
-    print(f"\nOutliers detected: {outliers.sum()} ({outliers.sum()/len(data)*100:.1f}%)")
-    
-    if outliers.sum() > 0:
-        print("\nOutlier dates and volumes:")
-        outlier_data = data[outliers][['date', 'call_volume']].sort_values('call_volume', ascending=False)
-        print(outlier_data.head(10))
-    
-    # Remove outliers if requested
-    if remove_outliers and outliers.sum() > 0:
-        print(f"\nRemoving {outliers.sum()} outliers...")
-        data = data[~outliers].reset_index(drop=True)
-        self.call_data_clean = data
-        print(f"Clean dataset: {len(data)} observations")
-    else:
-        self.call_data_clean = data
-    
-    # Time-based patterns
-    data['day_of_week'] = data['date'].dt.day_name()
-    data['month'] = data['date'].dt.month
-    data['year'] = data['date'].dt.year
-    data['quarter'] = data['date'].dt.quarter
-    
-    print("\nTIME-BASED PATTERNS:")
-    print("\nAverage calls by day of week:")
-    day_avg = data.groupby('day_of_week')['call_volume'].mean().reindex([
-        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-    ])
-    print(day_avg.round(1))
-    
-    print("\nAverage calls by month:")
-    month_avg = data.groupby('month')['call_volume'].mean()
-    print(month_avg.round(1))
-    
-    # Seasonality check
-    if len(data) > 365:
-        print("\nYearly comparison:")
-        yearly_avg = data.groupby('year')['call_volume'].agg(['mean', 'std', 'count'])
-        print(yearly_avg.round(1))
-    
-    return data
-
-def perform_mail_eda(self, remove_outliers=True):
-    """
-    Comprehensive EDA for mail data
-    """
-    print("\n" + "="*50)
-    print("MAIL DATA - EXPLORATORY DATA ANALYSIS")
-    print("="*50)
-    
-    data = self.mail_data.copy()
-    
-    # Basic statistics
-    print("\nBASIC STATISTICS:")
-    print(f"Total observations: {len(data)}")
-    print(f"Date range: {data['date'].min()} to {data['date'].max()}")
-    print(f"Duration: {(data['date'].max() - data['date'].min()).days} days")
-    print("\nMail Volume Statistics:")
-    print(data['mail_volume'].describe())
-    
-    # Check for missing dates
-    date_range = pd.date_range(start=data['date'].min(), end=data['date'].max())
-    missing_dates = set(date_range) - set(data['date'])
-    print(f"\nMissing dates: {len(missing_dates)}")
-    if len(missing_dates) > 0 and len(missing_dates) <= 10:
-        print("Missing dates:", sorted(missing_dates))
-    
-    # Outlier detection
-    outliers = self.detect_outliers_multiple_methods(data, 'mail_volume')
-    print(f"\nOutliers detected: {outliers.sum()} ({outliers.sum()/len(data)*100:.1f}%)")
-    
-    if outliers.sum() > 0:
-        print("\nOutlier dates and volumes:")
-        outlier_data = data[outliers][['date', 'mail_volume']].sort_values('mail_volume', ascending=False)
-        print(outlier_data.head(10))
-    
-    # Remove outliers if requested
-    if remove_outliers and outliers.sum() > 0:
-        print(f"\nRemoving {outliers.sum()} outliers...")
-        data = data[~outliers].reset_index(drop=True)
-        self.mail_data_clean = data
-        print(f"Clean dataset: {len(data)} observations")
-    else:
-        self.mail_data_clean = data
-    
-    # Time-based patterns
-    data['day_of_week'] = data['date'].dt.day_name()
-    data['month'] = data['date'].dt.month
-    data['year'] = data['date'].dt.year
-    data['quarter'] = data['date'].dt.quarter
-    
-    print("\nTIME-BASED PATTERNS:")
-    print("\nAverage mail volume by day of week:")
-    day_avg = data.groupby('day_of_week')['mail_volume'].mean().reindex([
-        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-    ])
-    print(day_avg.round(1))
-    
-    print("\nAverage mail volume by month:")
-    month_avg = data.groupby('month')['mail_volume'].mean()
-    print(month_avg.round(1))
-    
-    # Seasonality check
-    if len(data) > 365:
-        print("\nYearly comparison:")
-        yearly_avg = data.groupby('year')['mail_volume'].agg(['mean', 'std', 'count'])
-        print(yearly_avg.round(1))
-    
-    return data
-
-def combine_datasets(self, lag_days=None):
-    """
-    Combine call and mail datasets with optional lag
-    """
-    print("\n" + "="*50)
-    print("COMBINING DATASETS")
-    print("="*50)
-    
-    call_data = self.call_data_clean.copy()
-    mail_data = self.mail_data_clean.copy()
-    
-    if lag_days:
-        print(f"Applying {lag_days} day lag to mail data...")
-        mail_data['date'] = mail_data['date'] + timedelta(days=lag_days)
-    
-    # Merge datasets
-    self.combined_data = pd.merge(call_data, mail_data, on='date', how='outer')
-    self.combined_data = self.combined_data.sort_values('date').reset_index(drop=True)
-    
-    # Fill missing values
-    self.combined_data['call_volume'] = self.combined_data['call_volume'].fillna(0)
-    self.combined_data['mail_volume'] = self.combined_data['mail_volume'].fillna(0)
-    
-    print(f"Combined dataset: {len(self.combined_data)} observations")
-    print(f"Date range: {self.combined_data['date'].min()} to {self.combined_data['date'].max()}")
-    print(f"Rows with both call and mail data: {((self.combined_data['call_volume'] > 0) & (self.combined_data['mail_volume'] > 0)).sum()}")
-    
-    return self.combined_data
-
-def comparative_analysis(self):
-    """
-    Perform comparative analysis between calls and mail
-    """
-    print("\n" + "="*50)
-    print("COMPARATIVE ANALYSIS - CALLS vs MAIL")
-    print("="*50)
-    
-    if self.combined_data is None:
-        self.combine_datasets()
-    
-    data = self.combined_data.copy()
-    
-    # Filter data where both values exist
-    both_exist = (data['call_volume'] > 0) & (data['mail_volume'] > 0)
-    analysis_data = data[both_exist].copy()
-    
-    if len(analysis_data) == 0:
-        print("No overlapping data found for comparative analysis!")
-        return
-    
-    print(f"Analyzing {len(analysis_data)} days with both call and mail data")
-    
-    # Correlation analysis
-    correlations = {}
-    
-    # Pearson correlation
-    corr_pearson, p_pearson = pearsonr(analysis_data['call_volume'], analysis_data['mail_volume'])
-    correlations['Pearson'] = {'correlation': corr_pearson, 'p_value': p_pearson}
-    
-    # Spearman correlation
-    corr_spearman, p_spearman = spearmanr(analysis_data['call_volume'], analysis_data['mail_volume'])
-    correlations['Spearman'] = {'correlation': corr_spearman, 'p_value': p_spearman}
-    
-    print("\nCORRELATION ANALYSIS:")
-    for method, results in correlations.items():
-        print(f"{method} correlation: {results['correlation']:.4f} (p-value: {results['p_value']:.4f})")
-    
-    # Test different lags
-    print("\nLAG ANALYSIS:")
-    print("Testing different lag periods...")
-    
-    lag_results = []
-    for lag in range(0, 15):  # Test 0-14 day lags
-        mail_lagged = data['mail_volume'].shift(lag)
-        mask = (data['call_volume'] > 0) & (mail_lagged > 0)
-        
-        if mask.sum() > 10:  # Need at least 10 observations
-            corr, p_val = pearsonr(data.loc[mask, 'call_volume'], mail_lagged[mask])
-            lag_results.append({'lag': lag, 'correlation': corr, 'p_value': p_val, 'n_obs': mask.sum()})
-    
-    if lag_results:
-        lag_df = pd.DataFrame(lag_results)
-        best_lag = lag_df.loc[lag_df['correlation'].idxmax()]
-        print(f"\nBest lag period: {best_lag['lag']} days")
-        print(f"Correlation: {best_lag['correlation']:.4f}")
-        print(f"P-value: {best_lag['p_value']:.4f}")
-        print(f"Observations: {best_lag['n_obs']}")
-        
-        # Show top 5 lags
-        print("\nTop 5 lag periods:")
-        top_lags = lag_df.nlargest(5, 'correlation')
-        print(top_lags)
-    
-    # Response rate analysis
-    print("\nRESPONSE RATE ANALYSIS:")
-    analysis_data['response_rate'] = analysis_data['call_volume'] / analysis_data['mail_volume'] * 100
-    
-    # Remove extreme response rates (likely data issues)
-    valid_rates = analysis_data['response_rate'] < 50  # Assume >50% response rate is unrealistic
-    clean_rates = analysis_data[valid_rates]['response_rate']
-    
-    print(f"Response rate statistics (excluding extreme values):")
-    print(clean_rates.describe())
-    print(f"Median response rate: {clean_rates.median():.2f}%")
-    
-    return analysis_data, correlations, lag_results if 'lag_results' in locals() else None
-
-def create_visualizations(self):
-    """
-    Create comprehensive visualizations
-    """
-    print("\n" + "="*50)
-    print("CREATING VISUALIZATIONS")
-    print("="*50)
-    
-    # Set up the plotting style
-    plt.style.use('seaborn-v0_8')
-    fig = plt.figure(figsize=(20, 24))
-    
-    # 1. Call volume time series
-    ax1 = plt.subplot(4, 2, 1)
-    plt.plot(self.call_data_clean['date'], self.call_data_clean['call_volume'], 
-            linewidth=1, alpha=0.7, color='blue')
-    plt.title('Call Volume Over Time', fontsize=14, fontweight='bold')
-    plt.xlabel('Date')
-    plt.ylabel('Call Volume')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # 2. Mail volume time series
-    ax2 = plt.subplot(4, 2, 2)
-    plt.plot(self.mail_data_clean['date'], self.mail_data_clean['mail_volume'], 
-            linewidth=1, alpha=0.7, color='red')
-    plt.title('Mail Volume Over Time', fontsize=14, fontweight='bold')
-    plt.xlabel('Date')
-    plt.ylabel('Mail Volume')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # 3. Call volume distribution
-    ax3 = plt.subplot(4, 2, 3)
-    plt.hist(self.call_data_clean['call_volume'], bins=50, alpha=0.7, color='blue', edgecolor='black')
-    plt.title('Call Volume Distribution', fontsize=14, fontweight='bold')
-    plt.xlabel('Call Volume')
-    plt.ylabel('Frequency')
-    plt.grid(True, alpha=0.3)
-    
-    # 4. Mail volume distribution
-    ax4 = plt.subplot(4, 2, 4)
-    plt.hist(self.mail_data_clean['mail_volume'], bins=50, alpha=0.7, color='red', edgecolor='black')
-    plt.title('Mail Volume Distribution', fontsize=14, fontweight='bold')
-    plt.xlabel('Mail Volume')
-    plt.ylabel('Frequency')
-    plt.grid(True, alpha=0.3)
-    
-    # 5. Box plots by day of week (calls)
-    ax5 = plt.subplot(4, 2, 5)
-    call_data = self.call_data_clean.copy()
-    call_data['day_of_week'] = call_data['date'].dt.day_name()
-    day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    sns.boxplot(data=call_data, x='day_of_week', y='call_volume', order=day_order, ax=ax5)
-    plt.title('Call Volume by Day of Week', fontsize=14, fontweight='bold')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # 6. Box plots by day of week (mail)
-    ax6 = plt.subplot(4, 2, 6)
-    mail_data = self.mail_data_clean.copy()
-    mail_data['day_of_week'] = mail_data['date'].dt.day_name()
-    sns.boxplot(data=mail_data, x='day_of_week', y='mail_volume', order=day_order, ax=ax6)
-    plt.title('Mail Volume by Day of Week', fontsize=14, fontweight='bold')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # 7. Overlay time series
-    ax7 = plt.subplot(4, 2, 7)
-    if self.combined_data is not None:
-        # Normalize both series for comparison
-        call_norm = self.combined_data['call_volume'] / self.combined_data['call_volume'].max()
-        mail_norm = self.combined_data['mail_volume'] / self.combined_data['mail_volume'].max()
-        
-        plt.plot(self.combined_data['date'], call_norm, label='Calls (normalized)', 
-                alpha=0.7, color='blue', linewidth=1)
-        plt.plot(self.combined_data['date'], mail_norm, label='Mail (normalized)', 
-                alpha=0.7, color='red', linewidth=1)
-        plt.title('Normalized Call vs Mail Volume Over Time', fontsize=14, fontweight='bold')
-        plt.xlabel('Date')
-        plt.ylabel('Normalized Volume')
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.grid(True, alpha=0.3)
-    
-    # 8. Scatter plot (if combined data exists)
-    ax8 = plt.subplot(4, 2, 8)
-    if self.combined_data is not None:
-        mask = (self.combined_data['call_volume'] > 0) & (self.combined_data['mail_volume'] > 0)
-        subset = self.combined_data[mask]
-        
-        if len(subset) > 0:
-            plt.scatter(subset['mail_volume'], subset['call_volume'], alpha=0.6, color='purple')
-            
-            # Add trend line
-            z = np.polyfit(subset['mail_volume'], subset['call_volume'], 1)
-            p = np.poly1d(z)
-            plt.plot(subset['mail_volume'], p(subset['mail_volume']), "r--", alpha=0.8)
-            
-            plt.title('Call Volume vs Mail Volume', fontsize=14, fontweight='bold')
-            plt.xlabel('Mail Volume')
-            plt.ylabel('Call Volume')
-            plt.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-    
-    return fig
-
-def generate_data_quality_report(self):
-    """
-    Generate comprehensive data quality report
-    """
-    print("\n" + "="*60)
-    print("DATA QUALITY ASSESSMENT REPORT")
-    print("="*60)
-    
-    report = {
-        'call_data': {},
-        'mail_data': {},
-        'combined_data': {},
-        'recommendations': []
-    }
-    
-    # Call data quality
-    call_data = self.call_data_clean
-    report['call_data'] = {
-        'total_records': len(call_data),
-        'date_range': f"{call_data['date'].min()} to {call_data['date'].max()}",
-        'missing_values': call_data.isnull().sum().sum(),
-        'zero_values': (call_data['call_volume'] == 0).sum(),
-        'negative_values': (call_data['call_volume'] < 0).sum(),
-        'outliers_removed': getattr(self, 'outliers_removed', 0)
-    }
-    
-    # Mail data quality
-    mail_data = self.mail_data_clean
-    report['mail_data'] = {
-        'total_records': len(mail_data),
-        'date_range': f"{mail_data['date'].min()} to {mail_data['date'].max()}",
-        'missing_values': mail_data.isnull().sum().sum(),
-        'zero_values': (mail_data['mail_volume'] == 0).sum(),
-        'negative_values': (mail_data['mail_volume'] < 0).sum(),
-        'outliers_removed': getattr(self, 'mail_outliers_removed', 0)
-    }
-    
-    # Combined data quality
-    if self.combined_data is not None:
-        combined = self.combined_data
-        overlap = ((combined['call_volume'] > 0) & (combined['mail_volume'] > 0)).sum()
-        report['combined_data'] = {
-            'total_records': len(combined),
-            'overlapping_records': overlap,
-            'overlap_percentage': overlap / len(combined) * 100,
-            'call_only_records': ((combined['call_volume'] > 0) & (combined['mail_volume'] == 0)).sum(),
-            'mail_only_records': ((combined['call_volume'] == 0) & (combined['mail_volume'] > 0)).sum()
-        }
-    
-    # Print report
-    print("\nCALL DATA QUALITY:")
-    for key, value in report['call_data'].items():
-        print(f"  {key.replace('_', ' ').title()}: {value}")
-    
-    print("\nMAIL DATA QUALITY:")
-    for key, value in report['mail_data'].items():
-        print(f"  {key.replace('_', ' ').title()}: {value}")
-    
-    if report['combined_data']:
-        print("\nCOMBINED DATA QUALITY:")
-        for key, value in report['combined_data'].items():
-            print(f"  {key.replace('_', ' ').title()}: {value}")
-    
-    # Generate recommendations
-    recommendations = []
-    
-    if report['call_data']['zero_values'] > len(call_data) * 0.1:
-        recommendations.append("High number of zero call volume days - investigate if these are true zeros or missing data")
-    
-    if report['mail_data']['zero_values'] > len(mail_data) * 0.1:
-        recommendations.append("High number of zero mail volume days - verify mail campaign scheduling")
-    
-    if report['combined_data'] and report['combined_data']['overlap_percentage'] < 50:
-        recommendations.append("Low overlap between call and mail data - consider data alignment issues")
-    
-    if report['call_data']['negative_values'] > 0:
-        recommendations.append("Negative call volumes detected - data cleaning required")
-    
-    if report['mail_data']['negative_values'] > 0:
-        recommendations.append("Negative mail volumes detected - data cleaning required")
-    
-    print("\nRECOMMendations:")
-    for i, rec in enumerate(recommendations, 1):
-        print(f"  {i}. {rec}")
-    
-    return report
-
-def prepare_for_modeling(self, target_lag_days=None):
-    """
-    Prepare final dataset for time series modeling
-    """
-    print("\n" + "="*50)
-    print("PREPARING DATA FOR TIME SERIES MODELING")
-    print("="*50)
-    
-    if self.combined_data is None:
-        self.combine_datasets(lag_days=target_lag_days)
-    
-    # Create modeling dataset
-    modeling_data = self.combined_data.copy()
-    
-    # Add time-based features
-    modeling_data['year'] = modeling_data['date'].dt.year
-    modeling_data['month'] = modeling_data['date'].dt.month
-    modeling_data['day'] = modeling_data['date'].dt.day
-    modeling_data['day_of_week'] = modeling_data['date'].dt.dayofweek
-    modeling_data['day_of_year'] = modeling_data['date'].dt.dayofyear
-    modeling_data['week_of_year'] = modeling_data['date'].dt.isocalendar().week
-    modeling_data['quarter'] = modeling_data['date'].dt.quarter
-    modeling_data['is_weekend'] = modeling_data['day_of_week'].isin([5, 6]).astype(int)
-    
-    # Add lag features for mail volume
-    for lag in [1, 2, 3, 5, 7, 14]:
-        modeling_data[f'mail_volume_lag_{lag}'] = modeling_data['mail_volume'].shift(lag)
-    
-    # Add rolling averages
-    for window in [3, 7, 14, 30]:
-        modeling_data[f'mail_volume_ma_{window}'] = modeling_data['mail_volume'].rolling(window=window).mean()
-        modeling_data[f'call_volume_ma_{window}'] = modeling_data['call_volume'].rolling(window=window).mean()
-    
-    # Remove rows with NaN values created by lag/rolling features
-    modeling_data_clean = modeling_data.dropna().reset_index(drop=True)
-    
-    print(f"Final modeling dataset: {len(modeling_data_clean)} observations")
-    print(f"Features available: {len(modeling_data_clean.columns)} columns")
-    print(f"Date range: {modeling_data_clean['date'].min()} to {modeling_data_clean['date'].max()}")
-    
-    # Split features and target
-    feature_cols = [col for col in modeling_data_clean.columns if col not in ['date', 'call_volume']]
-    X = modeling_data_clean[feature_cols]
-    y = modeling_data_clean['call_volume']
-    
-    print(f"\nFeature matrix shape: {X.shape}")
-    print(f"Target vector shape: {y.shape}")
-    print(f"\nFeature columns:")
-    for i, col in enumerate(feature_cols, 1):
-        print(f"  {i:2d}. {col}")
-    
-    self.modeling_data = modeling_data_clean
-    self.X = X
-    self.y = y
-    
-    return modeling_data_clean, X, y
-```
-
-# Example usage
-
-def main():
-“””
-Example usage of the CallVolumeAnalyzer
-“””
-# Initialize analyzer
-analyzer = CallVolumeAnalyzer()
-
-```
-# Load and process data
-print("Step 1: Loading and aggregating call data...")
-# analyzer.load_and_aggregate_calls('path/to/call_data.csv', date_col='call_date', volume_col='call_count')
-
-print("Step 2: Loading and aggregating mail data...")
-# mail_files = ['path/to/mail_source1.csv', 'path/to/mail_source2.csv', 'path/to/mail_source3.csv']
-# analyzer.load_and_aggregate_mail(mail_files, date_col='mail_date', volume_col='pieces_sent')
-
-print("Step 3: Performing EDA on call data...")
-# analyzer.perform_call_eda(remove_outliers=True)
-
-print("Step 4: Performing EDA on mail data...")
-# analyzer.perform_mail_eda(remove_outliers=True)
-
-print("Step 5: Combining datasets and comparative analysis...")
-# analyzer.combine_datasets()
-# analyzer.comparative_analysis()
-
-print("Step 6: Creating visualizations...")
-# analyzer.create_visualizations()
-
-print("Step 7: Generating data quality report...")
-# analyzer.generate_data_quality_report()
-
-print("Step 8: Preparing data for modeling...")
-# modeling_data, X, y = analyzer.prepare_for_modeling()
-
-print("Analysis complete! Ready for time series modeling.")
-```
-
-# Advanced Time Series Modeling Functions
-
-class TimeSeriesModeler:
-def **init**(self, data, target_col=‘call_volume’, date_col=‘date’):
-self.data = data
-self.target_col = target_col
-self.date_col = date_col
-self.models = {}
-self.predictions = {}
-self.metrics = {}
-
-```
-def split_data(self, test_size=0.2, validation_size=0.1):
-    """
-    Split data into train, validation, and test sets chronologically
-    """
-    from sklearn.model_selection import train_test_split
-    
-    n = len(self.data)
-    test_start = int(n * (1 - test_size))
-    val_start = int(n * (1 - test_size - validation_size))
-    
-    self.train_data = self.data[:val_start].copy()
-    self.val_data = self.data[val_start:test_start].copy()
-    self.test_data = self.data[test_start:].copy()
-    
-    print(f"Data split:")
-    print(f"  Training: {len(self.train_data)} samples ({self.train_data[self.date_col].min()} to {self.train_data[self.date_col].max()})")
-    print(f"  Validation: {len(self.val_data)} samples ({self.val_data[self.date_col].min()} to {self.val_data[self.date_col].max()})")
-    print(f"  Test: {len(self.test_data)} samples ({self.test_data[self.date_col].min()} to {self.test_data[self.date_col].max()})")
-    
-    return self.train_data, self.val_data, self.test_data
-
-def train_linear_regression(self, feature_cols=None):
-    """
-    Train linear regression model
-    """
-    from sklearn.linear_model import LinearRegression
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-    
-    if feature_cols is None:
-        feature_cols = [col for col in self.train_data.columns if col not in [self.date_col, self.target_col]]
-    
-    # Prepare data
-    X_train = self.train_data[feature_cols]
-    y_train = self.train_data[self.target_col]
-    X_val = self.val_data[feature_cols]
-    y_val = self.val_data[self.target_col]
-    
-    # Scale features
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_val_scaled = scaler.transform(X_val)
-    
-    # Train model
-    model = LinearRegression()
-    model.fit(X_train_scaled, y_train)
-    
-    # Make predictions
-    y_train_pred = model.predict(X_train_scaled)
-    y_val_pred = model.predict(X_val_scaled)
-    
-    # Calculate metrics
-    train_metrics = {
-        'mae': mean_absolute_error(y_train, y_train_pred),
-        'mse': mean_squared_error(y_train, y_train_pred),
-        'rmse': np.sqrt(mean_squared_error(y_train, y_train_pred)),
-        'r2': r2_score(y_train, y_train_pred)
-    }
-    
-    val_metrics = {
-        'mae': mean_absolute_error(y_val, y_val_pred),
-        'mse': mean_squared_error(y_val, y_val_pred),
-        'rmse': np.sqrt(mean_squared_error(y_val, y_val_pred)),
-        'r2': r2_score(y_val, y_val_pred)
-    }
-    
-    self.models['linear_regression'] = {
-        'model': model,
-        'scaler': scaler,
-        'features': feature_cols
-    }
-    
-    self.metrics['linear_regression'] = {
-        'train': train_metrics,
-        'validation': val_metrics
-    }
-    
-    self.predictions['linear_regression'] = {
-        'train': y_train_pred,
-        'validation': y_val_pred
-    }
-    
-    print("Linear Regression Results:")
-    print(f"  Training RMSE: {train_metrics['rmse']:.2f}")
-    print(f"  Validation RMSE: {val_metrics['rmse']:.2f}")
-    print(f"  Training R²: {train_metrics['r2']:.4f}")
-    print(f"  Validation R²: {val_metrics['r2']:.4f}")
-    
-    return model, scaler
-
-def train_random_forest(self, feature_cols=None, n_estimators=100):
-    """
-    Train Random Forest model
-    """
-    from sklearn.ensemble import RandomForestRegressor
-    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-    
-    if feature_cols is None:
-        feature_cols = [col for col in self.train_data.columns if col not in [self.date_col, self.target_col]]
-    
-    # Prepare data
-    X_train = self.train_data[feature_cols]
-    y_train = self.train_data[self.target_col]
-    X_val = self.val_data[feature_cols]
-    y_val = self.val_data[self.target_col]
-    
-    # Train model
-    model = RandomForestRegressor(n_estimators=n_estimators, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
-    
-    # Make predictions
-    y_train_pred = model.predict(X_train)
-    y_val_pred = model.predict(X_val)
-    
-    # Calculate metrics
-    train_metrics = {
-        'mae': mean_absolute_error(y_train, y_train_pred),
-        'mse': mean_squared_error(y_train, y_train_pred),
-        'rmse': np.sqrt(mean_squared_error(y_train, y_train_pred)),
-        'r2': r2_score(y_train, y_train_pred)
-    }
-    
-    val_metrics = {
-        'mae': mean_absolute_error(y_val, y_val_pred),
-        'mse': mean_squared_error(y_val, y_val_pred),
-        'rmse': np.sqrt(mean_squared_error(y_val, y_val_pred)),
-        'r2': r2_score(y_val, y_val_pred)
-    }
-    
-    # Feature importance
-    feature_importance = pd.DataFrame({
-        'feature': feature_cols,
-        'importance': model.feature_importances_
-    }).sort_values('importance', ascending=False)
-    
-    self.models['random_forest'] = {
-        'model': model,
-        'features': feature_cols,
-        'feature_importance': feature_importance
-    }
-    
-    self.metrics['random_forest'] = {
-        'train': train_metrics,
-        'validation': val_metrics
-    }
-    
-    self.predictions['random_forest'] = {
-        'train': y_train_pred,
-        'validation': y_val_pred
-    }
-    
-    print("Random Forest Results:")
-    print(f"  Training RMSE: {train_metrics['rmse']:.2f}")
-    print(f"  Validation RMSE: {val_metrics['rmse']:.2f}")
-    print(f"  Training R²: {train_metrics['r2']:.4f}")
-    print(f"  Validation R²: {val_metrics['r2']:.4f}")
-    print("\nTop 10 Feature Importances:")
-    print(feature_importance.head(10))
-    
-    return model
-
-def train_arima_model(self, order=(1,1,1), seasonal_order=(1,1,1,7)):
-    """
-    Train ARIMA model for time series forecasting
-    """
     try:
-        from statsmodels.tsa.arima.model import ARIMA
-        from statsmodels.tsa.statespace.sarimax import SARIMAX
-        from sklearn.metrics import mean_absolute_error, mean_squared_error
+        # Combine datasets
+        combined = pd.merge(self.call_data_clean, self.mail_data_clean, 
+                          on='date', how='outer', suffixes=('_call', '_mail'))
+        combined = combined.sort_values('date').reset_index(drop=True)
+        combined['volume_call'] = combined['volume_call'].fillna(0)
+        combined['volume_mail'] = combined['volume_mail'].fillna(0)
         
-        # Prepare time series data
-        ts_data = self.train_data.set_index(self.date_col)[self.target_col]
-        ts_val = self.val_data.set_index(self.date_col)[self.target_col]
+        # Analyze overlap
+        both_exist = (combined['volume_call'] > 0) & (combined['volume_mail'] > 0)
+        overlap_data = combined[both_exist]
         
-        # Fit SARIMAX model (includes seasonal component)
-        model = SARIMAX(ts_data, order=order, seasonal_order=seasonal_order)
-        fitted_model = model.fit(disp=False)
+        self.logger.info(f"Combined dataset: {len(combined):,} records")
+        self.logger.info(f"Records with both call & mail data: {len(overlap_data):,}")
+        self.logger.info(f"Overlap percentage: {len(overlap_data)/len(combined)*100:.1f}%")
         
-        # Make predictions
-        train_pred = fitted_model.fittedvalues
-        val_pred = fitted_model.forecast(steps=len(ts_val))
+        if len(overlap_data) < self.config['MIN_OVERLAP_RECORDS']:
+            self.logger.warning(f"Insufficient overlapping data for correlation analysis (need ≥{self.config['MIN_OVERLAP_RECORDS']})")
+            return False
         
-        # Calculate metrics
-        train_metrics = {
-            'mae': mean_absolute_error(ts_data, train_pred),
-            'mse': mean_squared_error(ts_data, train_pred),
-            'rmse': np.sqrt(mean_squared_error(ts_data, train_pred))
+        # Basic correlations
+        corr_pearson, p_pearson = pearsonr(overlap_data['volume_call'], overlap_data['volume_mail'])
+        corr_spearman, p_spearman = spearmanr(overlap_data['volume_call'], overlap_data['volume_mail'])
+        
+        self.logger.info(f"Pearson correlation: {corr_pearson:.4f} (p-value: {p_pearson:.4f})")
+        self.logger.info(f"Spearman correlation: {corr_spearman:.4f} (p-value: {p_spearman:.4f})")
+        
+        # Lag analysis
+        self.logger.info(f"Testing lag correlations (0-{self.config['MAX_LAG_DAYS']} days)...")
+        lag_results = []
+        
+        for lag in range(0, self.config['MAX_LAG_DAYS'] + 1):
+            mail_lagged = combined['volume_mail'].shift(lag)
+            mask = (combined['volume_call'] > 0) & (mail_lagged > 0)
+            
+            if mask.sum() >= self.config['MIN_OVERLAP_RECORDS']:
+                try:
+                    corr, p_val = pearsonr(combined.loc[mask, 'volume_call'], mail_lagged[mask])
+                    lag_results.append({
+                        'lag': lag,
+                        'correlation': corr,
+                        'p_value': p_val,
+                        'n_obs': mask.sum()
+                    })
+                except:
+                    continue
+        
+        # Find best lag
+        if lag_results:
+            lag_df = pd.DataFrame(lag_results)
+            best_lag = lag_df.loc[lag_df['correlation'].idxmax()]
+            
+            self.logger.info(f"✓ Best lag found: {best_lag['lag']} days")
+            self.logger.info(f"  Correlation: {best_lag['correlation']:.4f}")
+            self.logger.info(f"  P-value: {best_lag['p_value']:.4f}")
+            self.logger.info(f"  Observations: {best_lag['n_obs']:,}")
+            
+            # Show top 5 lags
+            top_lags = lag_df.nlargest(5, 'correlation')
+            self.logger.info("Top 5 lag periods:")
+            for _, row in top_lags.iterrows():
+                self.logger.info(f"  {row['lag']} days: {row['correlation']:.4f} (n={row['n_obs']})")
+        
+        # Response rate analysis
+        overlap_data['response_rate'] = overlap_data['volume_call'] / overlap_data['volume_mail'] * 100
+        valid_rates = overlap_data[overlap_data['response_rate'] <= self.config['MAX_RESPONSE_RATE']]['response_rate']
+        
+        if len(valid_rates) > 0:
+            self.logger.info(f"Response rate analysis (n={len(valid_rates):,}):")
+            self.logger.info(f"  Mean: {valid_rates.mean():.2f}%")
+            self.logger.info(f"  Median: {valid_rates.median():.2f}%")
+            self.logger.info(f"  Std Dev: {valid_rates.std():.2f}%")
+            self.logger.info(f"  Range: {valid_rates.min():.2f}% - {valid_rates.max():.2f}%")
+        
+        # Store results
+        self.analysis_results = {
+            'correlations': {
+                'pearson': corr_pearson,
+                'spearman': corr_spearman,
+                'pearson_pvalue': p_pearson,
+                'spearman_pvalue': p_spearman
+            },
+            'lag_analysis': lag_df if lag_results else None,
+            'best_lag': best_lag if lag_results else None,
+            'response_rates': valid_rates if len(valid_rates) > 0 else None,
+            'overlap_stats': {
+                'total_records': len(combined),
+                'overlap_records': len(overlap_data),
+                'overlap_percentage': len(overlap_data)/len(combined)*100
+            }
         }
         
-        val_metrics = {
-            'mae': mean_absolute_error(ts_val, val_pred),
-            'mse': mean_squared_error(ts_val, val_pred),
-            'rmse': np.sqrt(mean_squared_error(ts_val, val_pred))
-        }
+        self.combined_data = combined
+        return True
         
-        self.models['arima'] = {
-            'model': fitted_model,
-            'order': order,
-            'seasonal_order': seasonal_order
-        }
-        
-        self.metrics['arima'] = {
-            'train': train_metrics,
-            'validation': val_metrics
-        }
-        
-        self.predictions['arima'] = {
-            'train': train_pred,
-            'validation': val_pred
-        }
-        
-        print("ARIMA Model Results:")
-        print(f"  Training RMSE: {train_metrics['rmse']:.2f}")
-        print(f"  Validation RMSE: {val_metrics['rmse']:.2f}")
-        print(f"  Model Order: {order}")
-        print(f"  Seasonal Order: {seasonal_order}")
-        
-        return fitted_model
-        
-    except ImportError:
-        print("statsmodels not available. Install with: pip install statsmodels")
-        return None
+    except Exception as e:
+        self.logger.error(f"✗ Error in correlation analysis: {str(e)}")
+        return False
 
-def compare_models(self):
-    """
-    Compare all trained models
-    """
-    if not self.metrics:
-        print("No models trained yet!")
-        return
+def _create_all_plots(self) -> bool:
+    """Create all plots and save to files"""
     
-    print("\n" + "="*60)
-    print("MODEL COMPARISON")
-    print("="*60)
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 5: CREATING PLOTS")
+    self.logger.info("=" * 60)
     
-    comparison_df = []
-    for model_name, metrics in self.metrics.items():
-        comparison_df.append({
-            'Model': model_name,
-            'Train_RMSE': metrics['train']['rmse'],
-            'Val_RMSE': metrics['validation']['rmse'],
-            'Train_R2': metrics['train'].get('r2', 'N/A'),
-            'Val_R2': metrics['validation'].get('r2', 'N/A')
-        })
-    
-    comparison_df = pd.DataFrame(comparison_df)
-    print(comparison_df.to_string(index=False))
-    
-    # Best model by validation RMSE
-    best_model = comparison_df.loc[comparison_df['Val_RMSE'].idxmin(), 'Model']
-    print(f"\nBest model by validation RMSE: {best_model}")
-    
-    return comparison_df
+    try:
+        # Set plotting parameters
+        plt.rcParams['figure.dpi'] = self.config['DPI']
+        plt.rcParams['savefig.dpi'] = self.config['DPI']
+        plt.rcParams['font.size'] = self.config['FONT_SIZE']
+        
+        plots_created = 0
+        
+        # 1. Mail volume time series with type legend
+        self.logger.info("Creating mail volume time series plot...")
+        if self._create_mail_timeseries_plot():
+            plots_created += 1
+        
+        # 2. Call volume time series
+        self.logger.info("Creating call volume time series plot...")
+        if self._create_call_timeseries_plot():
+            plots_created += 1
+        
+        # 3. Combined overlay plot
+        self.logger.info("Creating combined overlay plot...")
+        if self._create_combined_overlay_plot():
+            plots_created += 1
+        
+        # 4. Distribution plots
+        self.logger.info("Creating distribution plots...")
+        if self._create_distribution_plots():
+            plots_created += 1
+        
+        # 5. Day of week analysis
+        self.logger.info("Creating day of week analysis plots...")
+        if self._create_day_of_week_plots():
+            plots_created += 1
+        
+        # 6. Correlation scatter plot
+        if self.combined_data is not None:
+            self.logger.info("Creating correlation scatter plot...")
+            if self._create_correlation_scatter_plot():
+                plots_created += 1
+        
+        # 7. Lag analysis plot
+        if self.analysis_results.get('lag_analysis') is not None:
+            self.logger.info("Creating lag analysis plot...")
+            if self._create_lag_analysis_plot():
+                plots_created += 1
+        
+        # 8. Response rate plot
+        if self.analysis_results.get('response_rates') is not None:
+            self.logger.info("Creating response rate plot...")
+            if self._create_response_rate_plot():
+                plots_created += 1
+        
+        self.logger.info(f"✓ Created {plots_created} plots in {self.plots_dir}")
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error creating plots: {str(e)}")
+        return False
 
-def plot_predictions(self, model_name=None):
-    """
-    Plot actual vs predicted values
-    """
-    if model_name is None:
-        model_names = list(self.models.keys())
-    else:
-        model_names = [model_name]
-    
-    fig, axes = plt.subplots(len(model_names), 1, figsize=(15, 5*len(model_names)))
-    if len(model_names) == 1:
-        axes = [axes]
-    
-    for i, model_name in enumerate(model_names):
-        ax = axes[i]
+def _create_mail_timeseries_plot(self) -> bool:
+    """Create mail volume time series plot with type legend"""
+    try:
+        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
         
-        # Plot training data
-        train_dates = self.train_data[self.date_col]
-        train_actual = self.train_data[self.target_col]
-        train_pred = self.predictions[model_name]['train']
-        
-        ax.plot(train_dates, train_actual, label='Actual (Train)', color='blue', alpha=0.7)
-        ax.plot(train_dates, train_pred, label='Predicted (Train)', color='red', alpha=0.7)
-        
-        # Plot validation data
-        val_dates = self.val_data[self.date_col]
-        val_actual = self.val_data[self.target_col]
-        val_pred = self.predictions[model_name]['validation']
-        
-        ax.plot(val_dates, val_actual, label='Actual (Val)', color='blue', alpha=0.7, linestyle='--')
-        ax.plot(val_dates, val_pred, label='Predicted (Val)', color='red', alpha=0.7, linestyle='--')
-        
-        ax.set_title(f'{model_name.replace("_", " ").title()} - Predictions vs Actual')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Call Volume')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        # Add vertical line to separate train/val
-        ax.axvline(x=val_dates.iloc[0], color='black', linestyle=':', alpha=0.5, label='Train/Val Split')
-    
-    plt.tight_layout()
-    plt.show()
-    
-    return fig
-
-def forecast_future(self, model_name, days_ahead=30, mail_volume_forecast=None):
-    """
-    Make future predictions
-    """
-    if model_name not in self.models:
-        print(f"Model {model_name} not found!")
-        return None
-    
-    model_info = self.models[model_name]
-    
-    if model_name == 'arima':
-        # ARIMA forecasting
-        model = model_info['model']
-        forecast = model.forecast(steps=days_ahead)
-        
-        # Create future dates
-        last_date = self.data[self.date_col].max()
-        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=days_ahead)
-        
-        forecast_df = pd.DataFrame({
-            'date': future_dates,
-            'predicted_calls': forecast
-        })
-        
-    else:
-        # ML model forecasting (requires future mail volume data)
-        if mail_volume_forecast is None:
-            print("Mail volume forecast required for ML models!")
-            return None
-        
-        model = model_info['model']
-        features = model_info['features']
-        
-        # Create future feature matrix (simplified - would need proper feature engineering)
-        last_date = self.data[self.date_col].max()
-        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=days_ahead)
-        
-        # This is a simplified example - in practice, you'd need to properly engineer all features
-        future_features = pd.DataFrame({
-            'date': future_dates,
-            'mail_volume': mail_volume_forecast[:days_ahead] if len(mail_volume_forecast) >= days_ahead else [0]*days_ahead
-        })
-        
-        # Add time-based features
-        future_features['year'] = future_features['date'].dt.year
-        future_features['month'] = future_features['date'].dt.month
-        future_features['day'] = future_features['date'].dt.day
-        future_features['day_of_week'] = future_features['date'].dt.dayofweek
-        future_features['day_of_year'] = future_features['date'].dt.dayofyear
-        future_features['week_of_year'] = future_features['date'].dt.isocalendar().week
-        future_features['quarter'] = future_features['date'].dt.quarter
-        future_features['is_weekend'] = future_features['day_of_week'].isin([5, 6]).astype(int)
-        
-        # For features not available, fill with historical means or use simple imputation
-        for feature in features:
-            if feature not in future_features.columns:
-                future_features[feature] = self.data[feature].mean()
-        
-        X_future = future_features[features]
-        
-        if model_name == 'linear_regression':
-            scaler = model_info['scaler']
-            X_future_scaled = scaler.transform(X_future)
-            predictions = model.predict(X_future_scaled)
+        # Check if we have type information
+        if hasattr(self, 'mail_data_with_types') and 'type' in self.mail_data_with_types.columns:
+            # Plot by type with legend
+            unique_types = self.mail_data_with_types['type'].unique()
+            colors = plt.cm.Set3(np.linspace(0, 1, len(unique_types)))
+            
+            for i, mail_type in enumerate(unique_types):
+                type_data = self.mail_data_with_types[self.mail_data_with_types['type'] == mail_type]
+                type_agg = type_data.groupby('date')['volume'].sum().reset_index()
+                ax.plot(type_agg['date'], type_agg['volume'], 
+                       label=f'{mail_type}', color=colors[i], alpha=0.8, linewidth=2)
+            
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+            title = 'Mail Volume Over Time by Type'
         else:
-            predictions = model.predict(X_future)
+            # Plot total volume only
+            ax.plot(self.mail_data_clean['date'], self.mail_data_clean['volume'], 
+                   color='red', alpha=0.8, linewidth=2)
+            title = 'Mail Volume Over Time'
         
-        forecast_df = pd.DataFrame({
-            'date': future_dates,
-            'predicted_calls': predictions
-        })
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Mail Volume', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '01_mail_volume_timeseries.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating mail timeseries plot: {str(e)}")
+        return False
+
+def _create_call_timeseries_plot(self) -> bool:
+    """Create call volume time series plot"""
+    try:
+        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+        
+        ax.plot(self.call_data_clean['date'], self.call_data_clean['volume'], 
+               color='blue', alpha=0.8, linewidth=2)
+        ax.set_title('Call Volume Over Time', fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Call Volume', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '02_call_volume_timeseries.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating call timeseries plot: {str(e)}")
+        return False
+
+def _create_combined_overlay_plot(self) -> bool:
+    """Create combined overlay plot with normalized values"""
+    try:
+        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+        
+        # Normalize for comparison
+        mail_max = self.mail_data_clean['volume'].max()
+        call_max = self.call_data_clean['volume'].max()
+        
+        if mail_max > 0:
+            mail_norm = self.mail_data_clean['volume'] / mail_max
+        else:
+            mail_norm = self.mail_data_clean['volume']
+            
+        if call_max > 0:
+            call_norm = self.call_data_clean['volume'] / call_max
+        else:
+            call_norm = self.call_data_clean['volume']
+        
+        ax.plot(self.mail_data_clean['date'], mail_norm, 
+               label='Mail (normalized)', color='red', alpha=0.7, linewidth=2)
+        ax.plot(self.call_data_clean['date'], call_norm, 
+               label='Calls (normalized)', color='blue', alpha=0.7, linewidth=2)
+        
+        ax.set_title('Normalized Mail vs Call Volume Overlay', fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Normalized Volume (0-1)', fontsize=12)
+        ax.legend(fontsize=12)
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '03_combined_overlay.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating combined overlay plot: {str(e)}")
+        return False
+
+def _create_distribution_plots(self) -> bool:
+    """Create distribution plots for both datasets"""
+    try:
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 12))
+        
+        # Mail volume histogram
+        ax1.hist(self.mail_data_clean['volume'], bins=50, alpha=0.7, color='red', edgecolor='black')
+        ax1.set_title('Mail Volume Distribution', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Mail Volume')
+        ax1.set_ylabel('Frequency')
+        ax1.grid(True, alpha=0.3)
+        
+        # Call volume histogram
+        ax2.hist(self.call_data_clean['volume'], bins=50, alpha=0.7, color='blue', edgecolor='black')
+        ax2.set_title('Call Volume Distribution', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Call Volume')
+        ax2.set_ylabel('Frequency')
+        ax2.grid(True, alpha=0.3)
+        
+        # Mail volume box plot
+        ax3.boxplot(self.mail_data_clean['volume'], patch_artist=True, 
+                   boxprops=dict(facecolor='red', alpha=0.7))
+        ax3.set_title('Mail Volume Box Plot', fontsize=14, fontweight='bold')
+        ax3.set_ylabel('Mail Volume')
+        ax3.grid(True, alpha=0.3)
+        
+        # Call volume box plot
+        ax4.boxplot(self.call_data_clean['volume'], patch_artist=True, 
+                   boxprops=dict(facecolor='blue', alpha=0.7))
+        ax4.set_title('Call Volume Box Plot', fontsize=14, fontweight='bold')
+        ax4.set_ylabel('Call Volume')
+        ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '04_distributions.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating distribution plots: {str(e)}")
+        return False
+
+def _create_day_of_week_plots(self) -> bool:
+    """Create day of week analysis plots"""
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+        
+        # Prepare data with day of week
+        mail_dow = self.mail_data_clean.copy()
+        mail_dow['day_of_week'] = mail_dow['date'].dt.day_name()
+        
+        call_dow = self.call_data_clean.copy()
+        call_dow['day_of_week'] = call_dow['date'].dt.day_name()
+        
+        day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        # Mail volume by day of week
+        sns.boxplot(data=mail_dow, x='day_of_week', y='volume', order=day_order, ax=ax1)
+        ax1.set_title('Mail Volume by Day of Week', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Day of Week')
+        ax1.set_ylabel('Mail Volume')
+        ax1.tick_params(axis='x', rotation=45)
+        ax1.grid(True, alpha=0.3)
+        
+        # Call volume by day of week
+        sns.boxplot(data=call_dow, x='day_of_week', y='volume', order=day_order, ax=ax2)
+        ax2.set_title('Call Volume by Day of Week', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Day of Week')
+        ax2.set_ylabel('Call Volume')
+        ax2.tick_params(axis='x', rotation=45)
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '05_day_of_week_analysis.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating day of week plots: {str(e)}")
+        return False
+
+def _create_correlation_scatter_plot(self) -> bool:
+    """Create correlation scatter plot"""
+    try:
+        # Get overlapping data
+        both_exist = (self.combined_data['volume_call'] > 0) & (self.combined_data['volume_mail'] > 0)
+        scatter_data = self.combined_data[both_exist]
+        
+        if len(scatter_data) == 0:
+            self.logger.warning("No overlapping data for scatter plot")
+            return False
+        
+        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+        
+        # Create scatter plot
+        ax.scatter(scatter_data['volume_mail'], scatter_data['volume_call'], 
+                  alpha=0.6, color='purple', s=50)
+        
+        # Add trend line
+        if len(scatter_data) > 1:
+            z = np.polyfit(scatter_data['volume_mail'], scatter_data['volume_call'], 1)
+            p = np.poly1d(z)
+            ax.plot(scatter_data['volume_mail'], p(scatter_data['volume_mail']), 
+                   "r--", alpha=0.8, linewidth=2)
+        
+        # Add correlation info
+        if 'correlations' in self.analysis_results:
+            corr = self.analysis_results['correlations']['pearson']
+            ax.text(0.05, 0.95, f'Pearson r = {corr:.4f}', 
+                   transform=ax.transAxes, fontsize=12, 
+                   bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        
+        ax.set_title('Call Volume vs Mail Volume Correlation', fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Mail Volume', fontsize=12)
+        ax.set_ylabel('Call Volume', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '06_correlation_scatter.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating correlation scatter plot: {str(e)}")
+        return False
+
+def _create_lag_analysis_plot(self) -> bool:
+    """Create lag analysis plot"""
+    try:
+        lag_df = self.analysis_results['lag_analysis']
+        
+        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+        
+        ax.plot(lag_df['lag'], lag_df['correlation'], marker='o', linewidth=2, markersize=6)
+        
+        # Highlight best lag
+        best_lag = self.analysis_results['best_lag']
+        ax.axvline(x=best_lag['lag'], color='red', linestyle='--', alpha=0.7, 
+                  label=f'Best lag: {best_lag["lag"]} days')
+        ax.scatter([best_lag['lag']], [best_lag['correlation']], 
+                  color='red', s=100, zorder=5)
+        
+        ax.set_title('Correlation vs Lag Days', fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Lag Days', fontsize=12)
+        ax.set_ylabel('Pearson Correlation', fontsize=12)
+        ax.legend(fontsize=12)
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '07_lag_analysis.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating lag analysis plot: {str(e)}")
+        return False
+
+def _create_response_rate_plot(self) -> bool:
+    """Create response rate analysis plot"""
+    try:
+        response_rates = self.analysis_results['response_rates']
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+        
+        # Response rate histogram
+        ax1.hist(response_rates, bins=30, alpha=0.7, color='green', edgecolor='black')
+        ax1.axvline(response_rates.mean(), color='red', linestyle='--', linewidth=2, 
+                   label=f'Mean: {response_rates.mean():.2f}%')
+        ax1.axvline(response_rates.median(), color='orange', linestyle='--', linewidth=2, 
+                   label=f'Median: {response_rates.median():.2f}%')
+        ax1.set_title('Response Rate Distribution', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Response Rate (%)')
+        ax1.set_ylabel('Frequency')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Response rate box plot
+        ax2.boxplot(response_rates, patch_artist=True, 
+                   boxprops=dict(facecolor='green', alpha=0.7))
+        ax2.set_title('Response Rate Box Plot', fontsize=14, fontweight='bold')
+        ax2.set_ylabel('Response Rate (%)')
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '08_response_rate_analysis.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating response rate plot: {str(e)}")
+        return False
+
+def _create_monthly_trends_plot(self) -> bool:
+    """Create monthly trends analysis"""
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+        
+        # Prepare monthly data
+        mail_monthly = self.mail_data_clean.copy()
+        mail_monthly['month'] = mail_monthly['date'].dt.to_period('M')
+        mail_monthly = mail_monthly.groupby('month')['volume'].sum().reset_index()
+        mail_monthly['month_str'] = mail_monthly['month'].astype(str)
+        
+        call_monthly = self.call_data_clean.copy()
+        call_monthly['month'] = call_monthly['date'].dt.to_period('M')
+        call_monthly = call_monthly.groupby('month')['volume'].sum().reset_index()
+        call_monthly['month_str'] = call_monthly['month'].astype(str)
+        
+        # Mail monthly trends
+        ax1.plot(mail_monthly['month_str'], mail_monthly['volume'], 
+                marker='o', linewidth=2, markersize=6, color='red')
+        ax1.set_title('Monthly Mail Volume Trends', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Month')
+        ax1.set_ylabel('Mail Volume')
+        ax1.tick_params(axis='x', rotation=45)
+        ax1.grid(True, alpha=0.3)
+        
+        # Call monthly trends
+        ax2.plot(call_monthly['month_str'], call_monthly['volume'], 
+                marker='o', linewidth=2, markersize=6, color='blue')
+        ax2.set_title('Monthly Call Volume Trends', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Month')
+        ax2.set_ylabel('Call Volume')
+        ax2.tick_params(axis='x', rotation=45)
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '09_monthly_trends.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating monthly trends plot: {str(e)}")
+        return False
+
+def _create_mail_type_analysis_plot(self) -> bool:
+    """Create detailed mail type analysis"""
+    try:
+        if not hasattr(self, 'mail_data_with_types') or 'type' not in self.mail_data_with_types.columns:
+            return False
+        
+        # Mail type volume analysis
+        type_stats = self.mail_data_with_types.groupby('type')['volume'].agg(['sum', 'count', 'mean']).reset_index()
+        type_stats = type_stats.sort_values('sum', ascending=False)
+        
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
+        
+        # Total volume by type
+        ax1.bar(range(len(type_stats)), type_stats['sum'], color='orange', alpha=0.7)
+        ax1.set_title('Total Mail Volume by Type', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Mail Type')
+        ax1.set_ylabel('Total Volume')
+        ax1.set_xticks(range(len(type_stats)))
+        ax1.set_xticklabels(type_stats['type'], rotation=45, ha='right')
+        ax1.grid(True, alpha=0.3)
+        
+        # Average volume by type
+        ax2.bar(range(len(type_stats)), type_stats['mean'], color='purple', alpha=0.7)
+        ax2.set_title('Average Mail Volume by Type', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Mail Type')
+        ax2.set_ylabel('Average Volume')
+        ax2.set_xticks(range(len(type_stats)))
+        ax2.set_xticklabels(type_stats['type'], rotation=45, ha='right')
+        ax2.grid(True, alpha=0.3)
+        
+        # Number of campaigns by type
+        ax3.bar(range(len(type_stats)), type_stats['count'], color='brown', alpha=0.7)
+        ax3.set_title('Number of Campaigns by Type', fontsize=14, fontweight='bold')
+        ax3.set_xlabel('Mail Type')
+        ax3.set_ylabel('Number of Campaigns')
+        ax3.set_xticks(range(len(type_stats)))
+        ax3.set_xticklabels(type_stats['type'], rotation=45, ha='right')
+        ax3.grid(True, alpha=0.3)
+        
+        # Mail type pie chart
+        ax4.pie(type_stats['sum'], labels=type_stats['type'], autopct='%1.1f%%', startangle=90)
+        ax4.set_title('Mail Volume Distribution by Type', fontsize=14, fontweight='bold')
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '10_mail_type_analysis.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating mail type analysis plot: {str(e)}")
+        return False
+
+def _create_seasonal_analysis_plot(self) -> bool:
+    """Create seasonal analysis plots"""
+    try:
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
+        
+        # Prepare seasonal data
+        mail_seasonal = self.mail_data_clean.copy()
+        mail_seasonal['quarter'] = mail_seasonal['date'].dt.quarter
+        mail_seasonal['month'] = mail_seasonal['date'].dt.month
+        
+        call_seasonal = self.call_data_clean.copy()
+        call_seasonal['quarter'] = call_seasonal['date'].dt.quarter
+        call_seasonal['month'] = call_seasonal['date'].dt.month
+        
+        # Quarterly analysis - Mail
+        mail_quarterly = mail_seasonal.groupby('quarter')['volume'].mean()
+        ax1.bar(mail_quarterly.index, mail_quarterly.values, color='red', alpha=0.7)
+        ax1.set_title('Average Mail Volume by Quarter', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Quarter')
+        ax1.set_ylabel('Average Volume')
+        ax1.set_xticks([1, 2, 3, 4])
+        ax1.grid(True, alpha=0.3)
+        
+        # Quarterly analysis - Calls
+        call_quarterly = call_seasonal.groupby('quarter')['volume'].mean()
+        ax2.bar(call_quarterly.index, call_quarterly.values, color='blue', alpha=0.7)
+        ax2.set_title('Average Call Volume by Quarter', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Quarter')
+        ax2.set_ylabel('Average Volume')
+        ax2.set_xticks([1, 2, 3, 4])
+        ax2.grid(True, alpha=0.3)
+        
+        # Monthly analysis - Mail
+        mail_monthly = mail_seasonal.groupby('month')['volume'].mean()
+        ax3.plot(mail_monthly.index, mail_monthly.values, marker='o', color='red', linewidth=2)
+        ax3.set_title('Average Mail Volume by Month', fontsize=14, fontweight='bold')
+        ax3.set_xlabel('Month')
+        ax3.set_ylabel('Average Volume')
+        ax3.set_xticks(range(1, 13))
+        ax3.grid(True, alpha=0.3)
+        
+        # Monthly analysis - Calls
+        call_monthly = call_seasonal.groupby('month')['volume'].mean()
+        ax4.plot(call_monthly.index, call_monthly.values, marker='o', color='blue', linewidth=2)
+        ax4.set_title('Average Call Volume by Month', fontsize=14, fontweight='bold')
+        ax4.set_xlabel('Month')
+        ax4.set_ylabel('Average Volume')
+        ax4.set_xticks(range(1, 13))
+        ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = os.path.join(self.plots_dir, '11_seasonal_analysis.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=self.config['DPI'])
+        plt.close()
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"Error creating seasonal analysis plot: {str(e)}")
+        return False
+
+def _create_all_plots(self) -> bool:
+    """Create all plots and save to files"""
     
-    print(f"Future forecast for {days_ahead} days:")
-    print(forecast_df.head(10))
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 5: CREATING COMPREHENSIVE EDA PLOTS")
+    self.logger.info("=" * 60)
     
-    return forecast_df
-```
+    try:
+        # Set plotting parameters
+        plt.rcParams['figure.dpi'] = self.config['DPI']
+        plt.rcParams['savefig.dpi'] = self.config['DPI']
+        plt.rcParams['font.size'] = self.config['FONT_SIZE']
+        
+        plots_created = 0
+        plot_functions = [
+            ("Mail volume time series with type legend", self._create_mail_timeseries_plot),
+            ("Call volume time series", self._create_call_timeseries_plot),
+            ("Combined overlay plot", self._create_combined_overlay_plot),
+            ("Distribution plots", self._create_distribution_plots),
+            ("Day of week analysis", self._create_day_of_week_plots),
+            ("Monthly trends", self._create_monthly_trends_plot),
+            ("Seasonal analysis", self._create_seasonal_analysis_plot),
+        ]
+        
+        # Add conditional plots
+        if self.combined_data is not None:
+            plot_functions.append(("Correlation scatter plot", self._create_correlation_scatter_plot))
+        
+        if self.analysis_results.get('lag_analysis') is not None:
+            plot_functions.append(("Lag analysis plot", self._create_lag_analysis_plot))
+        
+        if self.analysis_results.get('response_rates') is not None:
+            plot_functions.append(("Response rate analysis", self._create_response_rate_plot))
+        
+        if hasattr(self, 'mail_data_with_types') and 'type' in self.mail_data_with_types.columns:
+            plot_functions.append(("Mail type analysis", self._create_mail_type_analysis_plot))
+        
+        # Create all plots
+        for plot_name, plot_function in plot_functions:
+            self.logger.info(f"Creating {plot_name}...")
+            if plot_function():
+                plots_created += 1
+                self.logger.info(f"✓ {plot_name} created successfully")
+            else:
+                self.logger.warning(f"✗ Failed to create {plot_name}")
+        
+        self.logger.info(f"✓ Created {plots_created}/{len(plot_functions)} plots in {self.plots_dir}")
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error creating plots: {str(e)}")
+        return False
 
-if **name** == “**main**”:
-main()
-
-# Data Quality Checks and Recommendations
-
-def perform_data_quality_checks(call_data, mail_data):
-“””
-Perform comprehensive data quality checks
-“””
-print(”\n” + “=”*60)
-print(“COMPREHENSIVE DATA QUALITY ASSESSMENT”)
-print(”=”*60)
-
-```
-issues = []
-recommendations = []
-
-# Check 1: Date consistency
-call_date_range = (call_data['date'].min(), call_data['date'].max())
-mail_date_range = (mail_data['date'].min(), mail_data['date'].max())
-
-print(f"Call data date range: {call_date_range[0]} to {call_date_range[1]}")
-print(f"Mail data date range: {mail_date_range[0]} to {mail_date_range[1]}")
-
-if call_date_range[0] > mail_date_range[1] or mail_date_range[0] > call_date_range[1]:
-    issues.append("No date overlap between call and mail data")
-    recommendations.append("Verify data collection periods and ensure temporal alignment")
-
-# Check 2: Data gaps
-call_date_gaps = pd.date_range(call_date_range[0], call_date_range[1]).difference(call_data['date'])
-mail_date_gaps = pd.date_range(mail_date_range[0], mail_date_range[1]).difference(mail_data['date'])
-
-if len(call_date_gaps) > 0:
-    issues.append(f"Call data has {len(call_date_gaps)} missing dates")
-    recommendations.append("Fill missing call dates with zeros or interpolated values")
-
-if len(mail_date_gaps) > 0:
-    issues.append(f"Mail data has {len(mail_date_gaps)} missing dates")
-    recommendations.append("Verify mail campaign schedule for missing dates")
-
-# Check 3: Extreme values
-call_q99 = call_data['call_volume'].quantile(0.99)
-call_outliers = (call_data['call_volume'] > call_q99 * 3).sum()
-
-if call_outliers > 0:
-    issues.append(f"Call data has {call_outliers} extreme outliers")
-    recommendations.append("Investigate extreme call volume spikes for data quality issues")
-
-# Check 4: Business logic validation
-weekend_mail = mail_data[mail_data['date'].dt.dayofweek.isin([5, 6])]['mail_volume'].sum()
-total_mail = mail_data['mail_volume'].sum()
-
-if weekend_mail > total_mail * 0.1:
-    issues.append("Significant mail volume on weekends detected")
-    recommendations.append("Verify if weekend mail delivery is expected for your business")
-
-# Check 5: Seasonal patterns
-if len(call_data) > 365:
-    monthly_variance = call_data.groupby(call_data['date'].dt.month)['call_volume'].var()
-    if monthly_variance.max() > monthly_variance.mean() * 10:
-        issues.append("Extremely high seasonal variance detected")
-        recommendations.append("Consider seasonal adjustment or separate seasonal models")
-
-# Print summary
-print(f"\nISSUES IDENTIFIED: {len(issues)}")
-for i, issue in enumerate(issues, 1):
-    print(f"  {i}. {issue}")
-
-print(f"\nRECOMMENDATIONS: {len(recommendations)}")
-for i, rec in enumerate(recommendations, 1):
-    print(f"  {i}. {rec}")
-
-return issues, recommendations
-```
-
-# Additional utility functions for advanced analysis
-
-def calculate_response_rates(call_data, mail_data, lag_days=None):
-“””
-Calculate response rates with optional lag
-“””
-if lag_days:
-mail_data = mail_data.copy()
-mail_data[‘date’] = mail_data[‘date’] + timedelta(days=lag_days)
-
-```
-merged = pd.merge(call_data, mail_data, on='date', how='inner')
-merged = merged[(merged['call_volume'] > 0) & (merged['mail_volume'] > 0)]
-
-if len(merged) == 0:
-    return None
-
-merged['response_rate'] = merged['call_volume'] / merged['mail_volume'] * 100
-
-# Remove extreme response rates (likely data issues)
-clean_rates = merged[merged['response_rate'] <= 50]
-
-stats = {
-    'mean_response_rate': clean_rates['response_rate'].mean(),
-    'median_response_rate': clean_rates['response_rate'].median(),
-    'std_response_rate': clean_rates['response_rate'].std(),
-    'min_response_rate': clean_rates['response_rate'].min(),
-    'max_response_rate': clean_rates['response_rate'].max(),
-    'total_observations': len(clean_rates)
-}
-
-return stats, clean_rates
-```
-
-def find_optimal_lag(call_data, mail_data, max_lag=21):
-“””
-Find optimal lag between mail and calls
-“””
-from scipy.stats import pearsonr
-
-```
-lag_results = []
-
-for lag in range(0, max_lag + 1):
-    mail_shifted = mail_data.copy()
-    mail_shifted['date'] = mail_shifted['date'] + timedelta(days=lag)
+def _generate_reports(self) -> bool:
+    """Generate comprehensive analysis reports"""
     
-    merged = pd.merge(call_data, mail_shifted, on='date', how='inner')
-    merged = merged[(merged['call_volume'] > 0) & (merged['mail_volume'] > 0)]
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 6: GENERATING REPORTS")
+    self.logger.info("=" * 60)
     
-    if len(merged) > 10:  # Need sufficient observations
-        corr, p_value = pearsonr(merged['call_volume'], merged['mail_volume'])
-        lag_results.append({
-            'lag_days': lag,
-            'correlation': corr,
-            'p_value': p_value,
-            'n_observations': len(merged)
-        })
+    try:
+        # Create summary report
+        summary_report = self._create_summary_report()
+        
+        # Save summary report
+        report_path = os.path.join(self.reports_dir, 'analysis_summary.txt')
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(summary_report)
+        
+        self.logger.info(f"✓ Summary report saved: {report_path}")
+        
+        # Create detailed metrics report
+        if self.analysis_results:
+            metrics_report = self._create_metrics_report()
+            metrics_path = os.path.join(self.reports_dir, 'detailed_metrics.txt')
+            with open(metrics_path, 'w', encoding='utf-8') as f:
+                f.write(metrics_report)
+            self.logger.info(f"✓ Metrics report saved: {metrics_path}")
+        
+        return True
+        
+    except Exception as e:
+        self.logger.error(f"✗ Error generating reports: {str(e)}")
+        return False
 
-if not lag_results:
-    return None
-
-lag_df = pd.DataFrame(lag_results)
-optimal_lag = lag_df.loc[lag_df['correlation'].idxmax()]
-
-return optimal_lag, lag_df
+def _create_summary_report(self) -> str:
+    """Create a comprehensive summary report"""
+    
+    report = []
+    report.append("=" * 80)
+    report.append("CALL VOLUME TIME SERIES ANALYSIS - SUMMARY REPORT")
+    report.append("=" * 80)
+    report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report.append("")
+    
+    # Data Overview
+    report.append("DATA OVERVIEW")
+    report.append("-" * 40)
+    report.append(f"Mail data file: {self.config['MAIL_FILE_PATH']}")
+    report.append(f"Call data file: {self.config['CALL_FILE_PATH']}")
+    report.append("")
+    
+    if self.mail_data_clean is not None:
+        report.append(f"Mail Data:")
+        report.append(f"  Records: {len(self.mail_data_clean):,}")
+        report.append(f"  Date range: {self.mail_data_clean['date'].min()} to {self.mail_data_clean['date'].max()}")
+        report.append(f"  Total volume: {self.mail_data_clean['volume'].sum():,}")
+        report.append(f"  Average daily volume: {self.mail_data_clean['volume'].mean():.1f}")
+        report.append("")
+    
+    if self.call_data_clean is not None:
+        report.append(f"Call Data:")
+        report.append(f"  Records: {len(self.call_data_clean):,}")
+        report.append(f"  Date range: {self.call_data_clean['date'].min()} to {self.call_data_clean['date'].max()}")
+        report.append(f"  Total volume: {self.call_data_clean['volume'].sum():,
 ```
-
-print(“Time Series Call Volume Prediction System Ready!”)
-print(”=”*60)
-print(“Available Classes:”)
-print(“1. CallVolumeAnalyzer - Main analysis class”)
-print(“2. TimeSeriesModeler - Advanced modeling class”)
-print(”\nKey Features:”)
-print(“✓ Data loading and aggregation”)
-print(“✓ Comprehensive EDA with outlier detection”)
-print(“✓ Multi-method outlier detection”)
-print(“✓ Comparative analysis between calls and mail”)
-print(“✓ Lag analysis and optimization”)
-print(“✓ Multiple modeling approaches (Linear, RF, ARIMA)”)
-print(“✓ Data quality assessment”)
-print(“✓ Future forecasting capabilities”)
-print(“✓ Comprehensive visualizations”)
-print(”\nTo get started, instantiate CallVolumeAnalyzer() and follow the example usage!”)

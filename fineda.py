@@ -13,38 +13,57 @@
 
 
 
-    # Insert this entire method into the CallVolumeAnalyzer class
+    # Insert this entire method into the CallVolumeAnalyzer # In your CallVolumeAnalyzer class, replace the old _fetch_market_data method with this one.
 
-    def _fetch_market_data(self) -> bool:
-        """New function to download financial data."""
-        self.logger.info("\n" + "=" * 60)
-        self.logger.info("STEP 5: FETCHING FINANCIAL MARKET DATA")
-        self.logger.info("=" * 60)
-        try:
-            if self.combined_data is None or self.combined_data.empty:
-                self.logger.warning("Combined data not available, cannot determine date range for financial data.")
-                return False
-
-            start_date = self.combined_data['date'].min()
-            end_date = self.combined_data['date'].max()
-            tickers = self.config['FINANCIAL_DATA']
-            
-            self.logger.info(f"Downloading market data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-            
-            data = yf.download(list(tickers.values()), start=start_date, end=end_date, progress=False)
-            
-            if data.empty:
-                self.logger.warning("Could not download financial data for the specified date range.")
-                self.financial_data = pd.DataFrame()
-                return True
-
-            self.financial_data = data['Adj Close'].rename(columns={v: k for k, v in tickers.items()})
-            self.financial_data.ffill(inplace=True) # Fill non-trading days
-            self.logger.info("✓ Financial data fetched successfully.")
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to fetch financial data: {e}")
+def _fetch_market_data(self) -> bool:
+    """New function to download financial data."""
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 5: FETCHING FINANCIAL MARKET DATA")
+    self.logger.info("=" * 60)
+    try:
+        if self.combined_data is None or self.combined_data.empty:
+            self.logger.warning("Combined data not available, cannot determine date range for financial data.")
             return False
+
+        start_date = self.combined_data['date'].min()
+        end_date = self.combined_data['date'].max()
+        tickers = self.config['FINANCIAL_DATA']
+        
+        self.logger.info(f"Downloading market data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        
+        data = yf.download(list(tickers.values()), start=start_date, end=end_date, progress=False)
+        
+        if data.empty:
+            self.logger.warning("Could not download financial data for the specified date range.")
+            self.financial_data = pd.DataFrame()
+            return True
+
+        # --- START OF FIX ---
+        # This block now handles both multi-ticker and single-ticker results
+        processed_data = pd.DataFrame()
+        try:
+            # Try the multi-ticker format first
+            processed_data = data['Adj Close']
+        except KeyError:
+            # If 'Adj Close' key fails, it's likely a single-ticker format
+            self.logger.info("Single ticker format detected, processing accordingly.")
+            processed_data = data[['Close']] # Use 'Close' price for single tickers
+            
+            # Since it's one ticker, we need to manually assign its name
+            single_ticker_symbol = list(tickers.values())[0]
+            single_ticker_name = list(tickers.keys())[0]
+            if len(tickers) == 1:
+                 processed_data.rename(columns={'Close': single_ticker_name}, inplace=True)
+
+        self.financial_data = processed_data.rename(columns={v: k for k, v in tickers.items()})
+        # --- END OF FIX ---
+        
+        self.financial_data.ffill(inplace=True) # Fill non-trading days
+        self.logger.info("✓ Financial data fetched successfully.")
+        return True
+    except Exception as e:
+        self.logger.error(f"Failed to fetch financial data: {e}")
+        return False
 
 
 

@@ -1,4 +1,40 @@
-Of course. Adding this level of functionality requires several new components. Here are the exact code snippets and clear instructions on where to add or replace them in your script.
+# In your CallVolumeAnalyzer class, REPLACE the existing _augment_call_data method with this new one.
+
+def _augment_call_data(self) -> bool:
+    """Finds and fills a missing year of call data using interpolation."""
+    self.logger.info("STEP 5b: Augmenting missing call data...")
+    try:
+        # --- START OF FIX ---
+        # Correctly calculate daily volume by counting rows (.size()) instead of summing a column.
+        self.call_daily_summary = self.call_data.groupby(pd.Grouper(key='date', freq='D')).size().to_frame(name='volume')
+        # --- END OF FIX ---
+
+        # Create a full date range to find gaps
+        full_range = pd.date_range(start=self.call_daily_summary.index.min(), end=self.call_daily_summary.index.max(), freq='D')
+        self.call_daily_summary = self.call_daily_summary.reindex(full_range)
+
+        # Identify which dates will be augmented
+        missing_dates = self.call_daily_summary[self.call_daily_summary['volume'].isnull()].index
+        if len(missing_dates) == 0:
+            self.logger.info("✓ No significant gaps in call data found to augment.")
+            self.augmented_dates = pd.Index([]) # Ensure attribute exists
+            return True
+
+        # Fill missing data using a linear method
+        self.call_daily_summary['volume'].interpolate(method='linear', inplace=True)
+        self.augmented_dates = missing_dates
+        self.logger.info(f"✓ Augmented {len(self.augmented_dates)} days of missing call data.")
+        return True
+    except Exception as e:
+        self.logger.error(f"Failed during data augmentation: {e}")
+        return False
+
+
+
+
+
+
+mOf course. Adding this level of functionality requires several new components. Here are the exact code snippets and clear instructions on where to add or replace them in your script.
 This process will transform the final output of your script from static images into a single, powerful interactive dashboard.
 Step 1: Add New Imports
 At the top of your file with the other import statements (around line 15), add the following imports for data processing and the interactive dashboard.

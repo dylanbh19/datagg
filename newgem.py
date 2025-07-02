@@ -3,10 +3,9 @@
 Definitive Marketing & Financial Analysis Pipeline
 
 This script performs a complete, end-to-end analysis of mail and call data.
-It includes robust data processing, augmentation of missing data, automated
-predictive modeling (SARIMAX, Prophet, RandomForest), and generation of a
-comprehensive set of static plots and reports, including a normalized
-trend comparison plot.
+It includes robust data processing with flexible date handling, augmentation of
+missing data, automated predictive modeling, and generation of a comprehensive
+set of static plots and reports.
 """
 
 # --- Core Libraries ---
@@ -29,7 +28,6 @@ import yfinance as yf
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
-from sklearn.preprocessing import MinMaxScaler
 import statsmodels.api as sm
 from prophet import Prophet
 
@@ -121,10 +119,12 @@ class MarketingAnalyzer:
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
+        # Initialize all data attributes
         self.mail_df = self.call_df = self.financial_df = None
         self.daily_data = self.augmented_data = None
         self.model_results = {}
         
+        # Create output directories
         self.plots_dir = os.path.join(config['OUTPUT_DIR'], 'plots')
         self.reports_dir = os.path.join(config['OUTPUT_DIR'], 'reports')
         for dir_path in [self.plots_dir, self.reports_dir]:
@@ -146,23 +146,47 @@ class MarketingAnalyzer:
             self.logger.error(traceback.format_exc())
 
     def _load_and_process_data(self):
-        """Loads, cleans, and integrates all data sources using CONFIG mappings."""
+        """Loads, cleans, and integrates all data sources with robust date handling."""
         self.logger.info("STEP 1: Loading and processing initial data...")
         try:
+            # --- Load Mail Data ---
             mail_cols = self.config['MAIL_COLUMNS']
             self.mail_df = pd.read_csv(self.config['MAIL_FILE_PATH'])
             self.mail_df.rename(columns={v: k for k, v in mail_cols.items()}, inplace=True)
-            self.mail_df['date'] = pd.to_datetime(self.mail_df['date'])
+            
+            # --- START OF FIX: Robust Date Parsing ---
+            # Let pandas infer the date format automatically, handling mixed formats.
+            # Coerce errors will turn un-parseable dates into NaT (Not a Time).
+            self.logger.info("Parsing dates in mail data with flexible format handling...")
+            self.mail_df['date'] = pd.to_datetime(self.mail_df['date'], errors='coerce')
+            
+            # Drop any rows where the date could not be parsed
+            invalid_dates = self.mail_df['date'].isnull().sum()
+            if invalid_dates > 0:
+                self.logger.warning(f"Found and removed {invalid_dates} rows with unreadable dates in mail file.")
+                self.mail_df.dropna(subset=['date'], inplace=True)
+            # --- END OF FIX ---
 
+            # --- Load Call Data ---
             call_cols = self.config['CALL_COLUMNS']
             self.call_df = pd.read_csv(self.config['CALL_FILE_PATH'])
             self.call_df.rename(columns={v: k for k, v in call_cols.items()}, inplace=True)
-            self.call_df['date'] = pd.to_datetime(self.call_df['date'])
 
+            # --- START OF FIX: Robust Date Parsing ---
+            self.logger.info("Parsing dates in call data with flexible format handling...")
+            self.call_df['date'] = pd.to_datetime(self.call_df['date'], errors='coerce')
+            invalid_dates = self.call_df['date'].isnull().sum()
+            if invalid_dates > 0:
+                self.logger.warning(f"Found and removed {invalid_dates} rows with unreadable dates in call file.")
+                self.call_df.dropna(subset=['date'], inplace=True)
+            # --- END OF FIX ---
+
+            # --- Aggregate Data ---
             mail_summary = self.mail_df.groupby(pd.Grouper(key='date', freq='D'))['volume'].sum().rename('mail_volume')
             call_summary = self.call_df.groupby(pd.Grouper(key='date', freq='D')).size().rename('call_volume')
             self.daily_data = pd.concat([mail_summary, call_summary], axis=1).fillna(0)
             
+            # --- Fetch Financial Data ---
             self.logger.info("Fetching financial data...")
             start, end = self.daily_data.index.min(), self.daily_data.index.max()
             tickers = self.config['FINANCIAL_DATA']
@@ -272,49 +296,10 @@ class MarketingAnalyzer:
             except Exception as e:
                 self.logger.warning(f"Random Forest model failed for {name}. Details: {e}")
         return True
-
-    def _create_normalized_trends_plot(self):
-        """Creates a plot with all data normalized to a 0-1 scale for trend comparison."""
-        self.logger.info("Creating plot: Normalized Trend Comparison...")
-        try:
-            data_to_normalize = self.augmented_data.copy()
-            
-            scaler = MinMaxScaler()
-            normalized_df = pd.DataFrame(scaler.fit_transform(data_to_normalize), 
-                                         columns=data_to_normalize.columns, 
-                                         index=data_to_normalize.index)
-
-            fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
-            
-            ax.plot(normalized_df.index, normalized_df['call_volume'], label='Call Volume (Normalized)', color='blue', linewidth=2.5)
-            ax.plot(normalized_df.index, normalized_df['mail_volume'], label='Mail Volume (Normalized)', color='skyblue', linewidth=1.5, linestyle='--')
-            
-            for col in self.config['FINANCIAL_DATA'].keys():
-                if col in normalized_df.columns:
-                    ax.plot(normalized_df.index, normalized_df[col], label=f'{col} (Normalized)', linestyle=':', alpha=0.9)
-            
-            if not self.augmented_dates.empty:
-                augmented_normalized_calls = normalized_df.loc[self.augmented_dates]['call_volume']
-                ax.plot(augmented_normalized_calls.index, augmented_normalized_calls.values, 
-                        label='Augmented Call Data', color='red', linestyle='', marker='.', markersize=4)
-
-            ax.set(title='Normalized Trend Comparison', 
-                   xlabel='Date', 
-                   ylabel='Normalized Value (0 to 1)')
-            ax.legend(loc='upper left')
-            fig.tight_layout()
-            plt.savefig(os.path.join(self.plots_dir, '00_normalized_trends.png'), dpi=self.config['DPI'])
-            plt.close(fig)
-            return True
-        except Exception as e:
-            self.logger.warning(f"Could not create normalized trends plot. Details: {e}")
-            return False
             
     def _create_visualizations(self):
         """Creates and saves all plots."""
         self.logger.info("STEP 4: Creating and saving all visualizations...")
-
-        self._create_normalized_trends_plot() 
 
         self.logger.info("Creating plot 1: Data Augmentation Overview...")
         fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
@@ -400,3 +385,4 @@ if __name__ == '__main__':
     logger = setup_logging(CONFIG['OUTPUT_DIR'])
     analyzer = MarketingAnalyzer(CONFIG, logger)
     analyzer.run_pipeline()
+

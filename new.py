@@ -163,3 +163,60 @@ REPLACE your existing run_complete_analysis method (around line 145) with this n
             self.logger.error(f"Analysis failed: {str(e)}\n{traceback.format_exc()}")
             return False
 
+
+
+
+
+
+
+# In your CallVolumeAnalyzer class, REPLACE the existing _fetch_market_data method with this new one.
+
+def _fetch_market_data(self) -> bool:
+    """New function to download financial data."""
+    self.logger.info("\n" + "=" * 60)
+    self.logger.info("STEP 5: FETCHING FINANCIAL MARKET DATA")
+    self.logger.info("=" * 60)
+    try:
+        # --- START OF FIX ---
+        # Determine date range directly from the loaded mail and call data
+        if self.mail_data is None or self.call_data is None:
+            self.logger.error("Mail or Call data not loaded, cannot determine date range.")
+            return False
+
+        start_date = min(self.mail_data['date'].min(), self.call_data['date'].min())
+        end_date = max(self.mail_data['date'].max(), self.call_data['date'].max())
+        # --- END OF FIX ---
+
+        tickers = self.config['FINANCIAL_DATA']
+        
+        self.logger.info(f"Downloading market data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        
+        data = yf.download(list(tickers.values()), start=start_date, end=end_date, progress=False)
+        
+        if data.empty:
+            self.logger.warning("Could not download financial data for the specified date range.")
+            self.financial_data = pd.DataFrame()
+            return True
+
+        # This block now handles both multi-ticker and single-ticker results
+        try:
+            # Try the multi-ticker format first
+            processed_data = data['Adj Close']
+        except KeyError:
+            # If 'Adj Close' key fails, it's likely a single-ticker format
+            self.logger.info("Single ticker format detected, processing accordingly.")
+            processed_data = data[['Close']] 
+            if len(tickers) == 1:
+                 single_ticker_name = list(tickers.keys())[0]
+                 processed_data.rename(columns={'Close': single_ticker_name}, inplace=True)
+        
+        # Rename columns to their friendly names
+        self.financial_data = processed_data.rename(columns={v: k for k, v in tickers.items()})
+        self.financial_data.ffill(inplace=True) # Fill non-trading days
+        
+        self.logger.info("✓ Financial data fetched successfully.")
+        return True
+    except Exception as e:
+        self.logger.error(f"Failed to fetch financial data: {e}")
+        self.logger.error(traceback.format_exc())
+        return False

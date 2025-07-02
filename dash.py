@@ -108,20 +108,12 @@ def augment_data_intelligently(call_df, mail_df, logger):
     """Performs advanced data augmentation by creating a synthetic year."""
     logger.info("STEP 2: Augmenting call data with synthetic year...")
     
-    # Aggregate call data to daily volumes first
     daily_calls = call_df.groupby('date').size().rename('call_volume')
-    
-    # Find the date range
     min_mail_date = mail_df['date'].min()
     max_date = max(mail_df['date'].max(), call_df['date'].max())
-    
-    # Create a full date index from the earliest mail date
     full_date_range = pd.date_range(start=min_mail_date, end=max_date, freq='D')
-    
-    # Reindex daily calls to the full range
     augmented_calls = daily_calls.reindex(full_date_range)
     
-    # Identify the synthetic and original sections
     original_call_data = augmented_calls.dropna()
     synthetic_dates = augmented_calls[augmented_calls.isnull()].index
     
@@ -132,13 +124,15 @@ def augment_data_intelligently(call_df, mail_df, logger):
 
     logger.warning(f"Creating synthetic call data for {len(synthetic_dates)} days...")
     
-    # Create synthetic data by shifting the 2025 pattern to 2024
     synthetic_data = original_call_data.copy()
-    synthetic_data.index = synthetic_data.index - pd.DateOffset(years=1)
-    
-    # Fill the missing values with the synthetic data
+    try:
+        synthetic_data.index = synthetic_data.index - pd.DateOffset(years=1)
+    except Exception as e:
+        logger.error(f"Could not apply date offset for synthetic data generation. Error: {e}")
+        synthetic_data.index = synthetic_data.index - pd.Timedelta(days=365) # Fallback
+        
     augmented_calls.fillna(synthetic_data, inplace=True)
-    augmented_calls.fillna(0, inplace=True) # Fill any remaining NaNs
+    augmented_calls.fillna(0, inplace=True)
     
     synthetic_df = augmented_calls.loc[synthetic_dates].to_frame()
     
@@ -149,13 +143,9 @@ def create_final_dataframe(augmented_calls, mail_df, config, logger):
     """Combines all data sources into a final dataframe for plotting."""
     logger.info("STEP 3: Combining all data sources...")
     
-    # Aggregate mail data
     daily_mail = mail_df.groupby('date')['volume'].sum().rename('mail_volume')
-    
-    # Join with augmented call data
     final_df = augmented_calls.join(daily_mail).fillna(0)
     
-    # Fetch and join financial data
     start, end = final_df.index.min(), final_df.index.max()
     tickers = config['FINANCIAL_DATA']
     financial_df = yf.download(list(tickers.values()), start=start, end=end, progress=False)
@@ -167,9 +157,23 @@ def create_final_dataframe(augmented_calls, mail_df, config, logger):
                 if (price_type, ticker) in financial_df.columns:
                     processed_financial[name] = financial_df[(price_type, ticker)]
                     break
-        final_df = final_df.join(processed_financial)
-        final_df.ffill(inplace=True).bfill(inplace=True)
+        
+        # --- START OF FIX ---
+        # The join operation is now assigned to a new variable to ensure final_df is not overwritten with None.
+        combined_df = final_df.join(processed_financial)
+        if combined_df is not None:
+             final_df = combined_df
+             # Fill forward first, then backward to handle weekends and holidays robustly
+             final_df.ffill(inplace=True)
+             final_df.bfill(inplace=True)
+        else:
+            logger.warning("Joining financial data failed. Proceeding without it.")
+        # --- END OF FIX ---
+    else:
+        logger.warning("Could not download financial data.")
 
+    # Final check for any remaining NaN values
+    final_df.fillna(0, inplace=True)
     logger.info("✓ Final dataframe for dashboard created.")
     return final_df
 
@@ -199,7 +203,6 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
         html.Div(id='tabs-content', style={'padding': '20px'})
     ])
 
-    # --- Callbacks to render tab content ---
     @app.callback(Output('tabs-content', 'children'), Input('tabs-main', 'value'))
     def render_content(tab):
         if tab == 'tab-overview':
@@ -211,19 +214,17 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
         elif tab == 'tab-trends':
             return trends_tab_layout(final_df)
 
-    # --- Layouts for each tab ---
     def overview_tab_layout(df):
         min_date, max_date = df.index.min().date(), df.index.max().date()
         return html.Div([
             html.H3("Overall Volume Trends", style={'textAlign': 'center'}),
-            html.P("Use the slider to select a date range for analysis.", style={'textAlign': 'center'}),
             dcc.Graph(id='overview-graph'),
             dcc.RangeSlider(
                 id='overview-date-slider',
                 min=0, max=len(df.index) - 1,
                 value=[0, len(df.index) - 1],
                 marks={i: date.strftime('%Y-%m') for i, date in enumerate(df.index) if date.day == 1 and date.month % 3 == 1},
-                step=7
+                step=7, tooltip={"placement": "bottom", "always_visible": True}
             )
         ])
 
@@ -231,16 +232,8 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
         return html.Div([
             html.H3("Campaign & Intent Breakdown", style={'textAlign': 'center'}),
             html.Div(style={'display': 'flex', 'justifyContent': 'center', 'gap': '30px', 'padding': '10px'}, children=[
-                dcc.Dropdown(
-                    id='mail-type-dropdown',
-                    options=[{'label': i, 'value': i} for i in mail_data['type'].unique()],
-                    multi=True, placeholder="Filter by Mail Type..."
-                ),
-                dcc.Dropdown(
-                    id='intent-dropdown',
-                    options=[{'label': i, 'value': i} for i in call_data['intent'].unique()],
-                    multi=True, placeholder="Filter by Call Intent..."
-                )
+                dcc.Dropdown(id='mail-type-dropdown', options=[{'label': i, 'value': i} for i in mail_data['type'].unique()], multi=True, placeholder="Filter by Mail Type...", style={'width': '400px'}),
+                dcc.Dropdown(id='intent-dropdown', options=[{'label': i, 'value': i} for i in call_data['intent'].unique()], multi=True, placeholder="Filter by Call Intent...", style={'width': '400px'})
             ]),
             dcc.Graph(id='breakdown-graph')
         ])
@@ -248,18 +241,15 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
     def augmentation_tab_layout(original, synthetic):
         return html.Div([
             html.H3("Data Augmentation Analysis", style={'textAlign': 'center'}),
-            html.P("This chart shows the original call data alongside the synthetically generated data used to fill gaps.", style={'textAlign': 'center'}),
             dcc.Graph(figure=create_augmentation_figure(original, synthetic))
         ])
 
     def trends_tab_layout(df):
         return html.Div([
             html.H3("Normalized Market & Business Trends", style={'textAlign': 'center'}),
-            html.P("All data is scaled to a common range (0-1) to compare trends. Call volume is smoothed with a 7-day rolling average.", style={'textAlign': 'center'}),
             dcc.Graph(figure=create_normalized_trends_figure(df))
         ])
     
-    # --- Figures for each tab ---
     @app.callback(Output('overview-graph', 'figure'), Input('overview-date-slider', 'value'))
     def update_overview_graph(date_indices):
         dff = final_df.iloc[date_indices[0]:date_indices[1]]
@@ -267,24 +257,20 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
         fig.add_trace(go.Scatter(x=dff.index, y=dff['call_volume'], name='Call Volume', line=dict(color='#007BFF')), secondary_y=False)
         fig.add_trace(go.Bar(x=dff.index, y=dff['mail_volume'], name='Mail Volume', marker_color='#17A2B8', opacity=0.6), secondary_y=True)
         fig.update_layout(title_text="Mail vs. Call Volume", template='plotly_white')
-        fig.update_yaxes(title_text="Call Volume", secondary_y=False)
-        fig.update_yaxes(title_text="Mail Volume", secondary_y=True)
+        fig.update_yaxes(title_text="Call Volume", secondary_y=False); fig.update_yaxes(title_text="Mail Volume", secondary_y=True)
         return fig
 
     @app.callback(Output('breakdown-graph', 'figure'), [Input('mail-type-dropdown', 'value'), Input('intent-dropdown', 'value')])
     def update_breakdown_graph(selected_mail_types, selected_intents):
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        # Filter mail data
         mail_dff = mail_df[mail_df['type'].isin(selected_mail_types)] if selected_mail_types else mail_df
         mail_agg = mail_dff.groupby('date')['volume'].sum()
         fig.add_trace(go.Bar(x=mail_agg.index, y=mail_agg.values, name='Mail Volume', marker_color='#17A2B8', opacity=0.6), secondary_y=True)
-        # Filter call data
         call_dff = call_df[call_df['intent'].isin(selected_intents)] if selected_intents else call_df
         call_agg = call_dff.groupby('date').size()
         fig.add_trace(go.Scatter(x=call_agg.index, y=call_agg.values, name='Call Volume', line=dict(color='#007BFF')), secondary_y=False)
         fig.update_layout(title_text="Filtered Campaign & Intent Analysis", template='plotly_white')
-        fig.update_yaxes(title_text="Call Volume", secondary_y=False)
-        fig.update_yaxes(title_text="Mail Volume", secondary_y=True)
+        fig.update_yaxes(title_text="Call Volume", secondary_y=False); fig.update_yaxes(title_text="Mail Volume", secondary_y=True)
         return fig
 
     def create_augmentation_figure(original, synthetic):
@@ -308,7 +294,7 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
         fig.update_layout(title_text="Normalized Business & Market Trends", template='plotly_white', yaxis_title="Normalized Value (0 to 1)")
         return fig
 
-    logger.info("✓ Dashboard initialized. Starting server...")
+    logger.info("✓ Dashboard initialized. Starting server at http://127.0.0.1:8050/")
     app.run_server(debug=True)
 
 # =============================================================================
@@ -317,13 +303,8 @@ def create_dashboard(final_df, mail_df, call_df, original_calls, synthetic_calls
 if __name__ == '__main__':
     logger = setup_logging()
     
-    # Run the entire data processing pipeline
     mail_data, call_data = load_and_process_data(CONFIG, logger)
     augmented_calls, synthetic_calls = augment_data_intelligently(call_data, mail_data, logger)
-    
-    # Create the final dataframe for the dashboard
     final_dataframe = create_final_dataframe(augmented_calls, mail_data, CONFIG, logger)
     
-    # Pass the necessary dataframes to the dashboard
     create_dashboard(final_dataframe, mail_data, call_data, augmented_calls.loc[call_data['date'].min():], synthetic_calls)
-

@@ -3,9 +3,9 @@
 Definitive Marketing & Financial Analysis Pipeline
 
 This script performs a complete, end-to-end analysis of mail and call data.
-It includes robust data processing with flexible date handling, augmentation of
-missing data, automated predictive modeling, and generation of a comprehensive
-set of static plots and reports.
+It includes robust data processing with flexible date handling and removal logging,
+augmentation of missing data, automated predictive modeling, and generation of a
+comprehensive set of static plots and reports.
 """
 
 # --- Core Libraries ---
@@ -82,26 +82,26 @@ def setup_logging(output_dir: str):
     return logger
 
 # =============================================================================
-# CONFIGURATION - EDIT THIS SECTION
+# CONFIGURATION - UPDATED WITH YOUR SETTINGS
 # =============================================================================
 CONFIG = {
-    # --- 1. SET YOUR FILE PATHS HERE ---
-    'MAIL_FILE_PATH': r'C:\path\to\your\mail_data.csv',        # <-- EDIT THIS
-    'CALL_FILE_PATH': r'C:\path\to\your\call_data.csv',        # <-- EDIT THIS
-    'OUTPUT_DIR': r'C:\path\to\output\final_analysis',            # <-- EDIT THIS
+    # --- Your File Paths ---
+    'MAIL_FILE_PATH': r'merged_output.csv',
+    'CALL_FILE_PATH': r'data\GenesysExtract_20250609.csv',
+    'OUTPUT_DIR': r'output\plots\reports',
 
-    # --- 2. MAP YOUR COLUMN NAMES HERE ---
+    # --- Your Column Mappings ---
     'MAIL_COLUMNS': {
-        'date': 'date',          # <-- EDIT with the name of the date column in your mail file
-        'volume': 'volume',      # <-- EDIT with the name of the mail volume/quantity column
-        'type': 'mail_type'      # <-- EDIT with the name of the column specifying the mail type
+        'date': 'mail date',
+        'volume': 'mail_volume',
+        'type': 'mail_type'
     },
     'CALL_COLUMNS': {
-        'date': 'date',          # <-- EDIT with the name of the date column in your call file
-        'intent': 'intent'       # <-- EDIT with the name of the column specifying the call reason/intent
+        'date': 'ConversationStart',
+        'intent': 'vui_intent'
     },
 
-    # --- Other Settings (Usually No Need to Change) ---
+    # --- Other Settings ---
     'FINANCIAL_DATA': {
         'S&P 500': '^GSPC',
         '10-Yr Treasury Yield': '^TNX'
@@ -149,64 +149,74 @@ class MarketingAnalyzer:
         """Loads, cleans, and integrates all data sources with robust date handling."""
         self.logger.info("STEP 1: Loading and processing initial data...")
         try:
-            # --- Load Mail Data ---
+            removed_rows = []
+
+            # --- Load and Process Mail Data ---
             mail_cols = self.config['MAIL_COLUMNS']
             self.mail_df = pd.read_csv(self.config['MAIL_FILE_PATH'])
             self.mail_df.rename(columns={v: k for k, v in mail_cols.items()}, inplace=True)
             
-            # --- START OF FIX: Robust Date Parsing ---
-            # Let pandas infer the date format automatically, handling mixed formats.
-            # Coerce errors will turn un-parseable dates into NaT (Not a Time).
-            self.logger.info("Parsing dates in mail data with flexible format handling...")
+            self.mail_df['original_date'] = self.mail_df['date'] # Keep original for logging
             self.mail_df['date'] = pd.to_datetime(self.mail_df['date'], errors='coerce')
-            
-            # Drop any rows where the date could not be parsed
-            invalid_dates = self.mail_df['date'].isnull().sum()
-            if invalid_dates > 0:
-                self.logger.warning(f"Found and removed {invalid_dates} rows with unreadable dates in mail file.")
+            invalid_mail_rows = self.mail_df[self.mail_df['date'].isnull()]
+            if not invalid_mail_rows.empty:
+                self.logger.warning(f"Found and removed {len(invalid_mail_rows)} rows with unreadable dates in the mail file.")
+                invalid_mail_rows['removal_reason'] = 'Unreadable Date'
+                removed_rows.append(invalid_mail_rows)
                 self.mail_df.dropna(subset=['date'], inplace=True)
-            # --- END OF FIX ---
 
-            # --- Load Call Data ---
+            # --- Load and Process Call Data ---
             call_cols = self.config['CALL_COLUMNS']
             self.call_df = pd.read_csv(self.config['CALL_FILE_PATH'])
             self.call_df.rename(columns={v: k for k, v in call_cols.items()}, inplace=True)
-
-            # --- START OF FIX: Robust Date Parsing ---
-            self.logger.info("Parsing dates in call data with flexible format handling...")
+            
+            self.call_df['original_date'] = self.call_df['date']
             self.call_df['date'] = pd.to_datetime(self.call_df['date'], errors='coerce')
-            invalid_dates = self.call_df['date'].isnull().sum()
-            if invalid_dates > 0:
-                self.logger.warning(f"Found and removed {invalid_dates} rows with unreadable dates in call file.")
+            invalid_call_rows = self.call_df[self.call_df['date'].isnull()]
+            if not invalid_call_rows.empty:
+                self.logger.warning(f"Found and removed {len(invalid_call_rows)} rows with unreadable dates in the call file.")
+                invalid_call_rows['removal_reason'] = 'Unreadable Date'
+                removed_rows.append(invalid_call_rows)
                 self.call_df.dropna(subset=['date'], inplace=True)
-            # --- END OF FIX ---
+
+            # --- Save Removed Rows to File ---
+            if removed_rows:
+                removed_df = pd.concat(removed_rows, ignore_index=True)
+                removed_filepath = os.path.join(self.config['OUTPUT_DIR'], 'removed_rows_log.csv')
+                removed_df.to_csv(removed_filepath, index=False)
+                self.logger.info(f"✓ Details of {len(removed_df)} removed rows saved to: {removed_filepath}")
 
             # --- Aggregate Data ---
             mail_summary = self.mail_df.groupby(pd.Grouper(key='date', freq='D'))['volume'].sum().rename('mail_volume')
             call_summary = self.call_df.groupby(pd.Grouper(key='date', freq='D')).size().rename('call_volume')
             self.daily_data = pd.concat([mail_summary, call_summary], axis=1).fillna(0)
             
-            # --- Fetch Financial Data ---
+            # --- Definitive Fix for Financial Data ---
             self.logger.info("Fetching financial data...")
             start, end = self.daily_data.index.min(), self.daily_data.index.max()
             tickers = self.config['FINANCIAL_DATA']
-            self.financial_df = yf.download(list(tickers.values()), start=start, end=end, progress=False)['Adj Close']
-            self.financial_df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
-            self.daily_data = self.daily_data.join(self.financial_df)
+            raw_financial_df = yf.download(list(tickers.values()), start=start, end=end, progress=False)
             
+            self.financial_df = pd.DataFrame(index=raw_financial_df.index)
+            for friendly_name, ticker in tickers.items():
+                # Try to get price data from common column names, making it robust
+                for price_type in ['Adj Close', 'Close', 'Open']:
+                    if (price_type, ticker) in raw_financial_df.columns:
+                        self.financial_df[friendly_name] = raw_financial_df[(price_type, ticker)]
+                        break # Found a price, move to next ticker
+                else: # This else belongs to the for loop, runs if `break` was not hit
+                    self.logger.warning(f"Could not find price data for ticker '{ticker}'. It will be skipped.")
+            
+            self.daily_data = self.daily_data.join(self.financial_df)
             self.daily_data.ffill(inplace=True)
             self.daily_data.bfill(inplace=True)
+            self.daily_data.fillna(0, inplace=True) # Fill any remaining NaNs
             
             self.logger.info("✓ Data loaded and initial table created.")
             return True
-        except FileNotFoundError as e:
-            self.logger.error(f"File not found. Please check paths in CONFIG. Details: {e}")
-            return False
-        except KeyError as e:
-            self.logger.error(f"Column not found. Please check column name mappings in CONFIG. Details: {e}")
-            return False
         except Exception as e:
             self.logger.error(f"An unexpected error occurred during data loading: {e}")
+            self.logger.error(traceback.format_exc())
             return False
 
     def _augment_missing_data(self):
@@ -385,4 +395,3 @@ if __name__ == '__main__':
     logger = setup_logging(CONFIG['OUTPUT_DIR'])
     analyzer = MarketingAnalyzer(CONFIG, logger)
     analyzer.run_pipeline()
-

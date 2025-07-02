@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Comprehensive Exploratory Data Analysis (EDA) Pipeline for Marketing Analysis
+Comprehensive and Robust Exploratory Data Analysis (EDA) Pipeline
 
-This script performs a deep EDA on mail and call data. It includes robust data
-processing, timeline extension and augmentation, feature engineering, and the
-generation of a comprehensive set of static plot files.
+This script performs a deep EDA on mail and call data. It includes corrected
+data augmentation with timeline extension, robust date handling, feature
+engineering, and a comprehensive set of clear, readable static plots.
 """
 
 # --- Core Libraries ---
@@ -64,12 +64,10 @@ def setup_logging(output_dir: str):
     if logger.hasHandlers():
         logger.handlers.clear()
 
-    # Console Handler (with colors)
     ch = logging.StreamHandler()
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
 
-    # File Handler (without colors)
     fh = logging.FileHandler(os.path.join(output_dir, f'eda_log_{datetime.now().strftime("%Y%m%d")}.txt'))
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s\n%(pathname)s:%(lineno)d'))
     logger.addHandler(fh)
@@ -136,37 +134,24 @@ class EDAAnalyzer:
         """Loads, cleans, and integrates all data sources with robust date handling."""
         self.logger.info("STEP 1: Loading and processing initial data...")
         try:
-            # --- Load and Process Mail Data ---
             mail_cols = self.config['MAIL_COLUMNS']
             self.mail_df = pd.read_csv(self.config['MAIL_FILE_PATH'], encoding='utf-8', on_bad_lines='warn')
             self.mail_df.rename(columns={v: k for k, v in mail_cols.items()}, inplace=True)
-            
-            self.logger.info("Parsing and standardizing dates in mail data...")
             self.mail_df['date'] = pd.to_datetime(self.mail_df['date'], errors='coerce').dt.normalize()
             self.mail_df.dropna(subset=['date'], inplace=True)
             self.mail_df.set_index('date', inplace=True)
 
-
-            # --- Load and Process Call Data ---
             call_cols = self.config['CALL_COLUMNS']
             self.call_df = pd.read_csv(self.config['CALL_FILE_PATH'], encoding='utf-8', on_bad_lines='warn')
             self.call_df.rename(columns={v: k for k, v in call_cols.items()}, inplace=True)
-            
-            self.logger.info("Parsing and standardizing dates in call data...")
             self.call_df['date'] = pd.to_datetime(self.call_df['date'], errors='coerce').dt.normalize()
             self.call_df.dropna(subset=['date'], inplace=True)
             self.call_df.set_index('date', inplace=True)
 
-
-            # --- Aggregate Data ---
-            self.logger.info("Aggregating mail and call data to daily volumes...")
             mail_summary = self.mail_df.groupby(self.mail_df.index)['volume'].sum().rename('mail_volume')
-            
-            # This line calculates call volume by counting the number of rows (calls) per day
             call_summary = self.call_df.groupby(self.call_df.index).size().rename('call_volume')
             self.daily_data = pd.concat([mail_summary, call_summary], axis=1).fillna(0)
             
-            # --- Fetch Financial Data ---
             self.logger.info("Fetching financial data...")
             start, end = self.daily_data.index.min(), self.daily_data.index.max()
             tickers = self.config['FINANCIAL_DATA']
@@ -190,37 +175,34 @@ class EDAAnalyzer:
             return False
 
     def _augment_call_data(self):
-        """Identifies and fills significant gaps in the call data record, extending the timeline if necessary."""
+        """Correctly augments call data to match the earliest mail date."""
         self.logger.info("STEP 2: Augmenting missing call data...")
-        self.augmented_data = self.daily_data.copy()
         
-        # --- START OF NEW LOGIC: Extend date range to match earliest mail data ---
+        # --- START OF FIX: Correct Augmentation Logic ---
         mail_start_date = self.mail_df.index.min()
-        call_start_date = self.augmented_data.index.min()
+        combined_start_date = min(mail_start_date, self.daily_data.index.min())
+        combined_end_date = self.daily_data.index.max()
 
-        if mail_start_date < call_start_date:
-            self.logger.warning(f"Mail data starts on {mail_start_date.date()}, which is earlier than call data on {call_start_date.date()}. Extending timeline.")
-            # Create an extended date range from the earliest mail date
-            extended_range = pd.date_range(start=mail_start_date, end=self.augmented_data.index.max(), freq='D')
-            self.augmented_data = self.augmented_data.reindex(extended_range)
-        else:
-            # Default behavior: use existing full range
-            full_range = pd.date_range(start=self.augmented_data.index.min(), end=self.augmented_data.index.max(), freq='D')
-            self.augmented_data = self.augmented_data.reindex(full_range)
-        # --- END OF NEW LOGIC ---
+        self.logger.info(f"Full analysis date range set from {combined_start_date.date()} to {combined_end_date.date()}.")
         
-        missing_dates = self.augmented_data[self.augmented_data['call_volume'].isnull()].index
+        # Create a complete date range for the final augmented dataset
+        full_range = pd.date_range(start=combined_start_date, end=combined_end_date, freq='D')
         
-        if len(missing_dates) < 30:
-            self.logger.info("No significant data gap found. Filling minor gaps with 0.")
-            self.augmented_data.fillna(0, inplace=True)
-            self.augmented_dates = pd.Index([])
-        else:
-            self.logger.warning(f"Found a data gap of {len(missing_dates)} days. Filling with interpolated values...")
-            self.augmented_data['call_volume'] = self.augmented_data['call_volume'].interpolate(method='time')
-            self.augmented_data.fillna(method='ffill', inplace=True)
-            self.augmented_data.fillna(method='bfill', inplace=True)
-            self.augmented_dates = missing_dates
+        # Reindex the daily data to this full range, creating NaNs where data is missing
+        self.augmented_data = self.daily_data.reindex(full_range)
+
+        # Identify all dates that were originally NaN, including the new extended period
+        self.augmented_dates = self.augmented_data[self.augmented_data['call_volume'].isnull()].index
+        
+        # First, fill all NaNs with 0 to provide a solid baseline for interpolation
+        self.augmented_data.fillna(0, inplace=True)
+        
+        # If there were any original gaps (not just the extended timeline), interpolate them now
+        # This part is more for internal gaps, but is safe to run
+        internal_gaps = self.augmented_data.loc[self.daily_data.index.min():]['call_volume'].replace(0, np.nan)
+        internal_gaps_interpolated = internal_gaps.interpolate(method='time')
+        self.augmented_data.loc[internal_gaps_interpolated.index, 'call_volume'] = internal_gaps_interpolated.values
+        # --- END OF FIX ---
         
         self.logger.info("✓ Data augmentation step complete.")
         return True
@@ -242,70 +224,84 @@ class EDAAnalyzer:
         return True
 
     def _create_eda_visualizations(self):
-        """Creates and saves a comprehensive set of EDA plots."""
+        """Creates and saves a comprehensive set of EDA plots with fixes."""
         self.logger.info("STEP 4: Creating all EDA visualizations...")
 
-        # Plot 1: Overall Mail and Call Volume
-        self.logger.info("Creating plot: Overall Mail vs. Call Volume...")
-        fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
-        ax.plot(self.daily_data.index, self.daily_data['call_volume'], label='Call Volume', color='navy', zorder=10)
-        ax.bar(self.daily_data.index, self.daily_data['mail_volume'], label='Mail Volume', color='skyblue', width=1.0, alpha=0.8)
-        ax.set(title='Overall Daily Mail and Call Volumes', xlabel='Date', ylabel='Volume')
-        ax.legend()
-        plt.savefig(os.path.join(self.plots_dir, '01_overall_volumes.png'), dpi=self.config['DPI'])
+        # Plot 1: Overall Mail and Call Volume (FIXED with dual axis)
+        self.logger.info("Creating plot: Overall Mail vs. Call Volume (Dual Axis)...")
+        fig, ax1 = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+        ax1.set_xlabel('Date', fontsize=12)
+        ax1.set_ylabel('Daily Call Volume', color='navy', fontsize=14)
+        ax1.plot(self.augmented_data.index, self.augmented_data['call_volume'], color='navy', label='Call Volume')
+        ax1.tick_params(axis='y', labelcolor='navy')
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Daily Mail Volume', color='skyblue', fontsize=14)
+        ax2.bar(self.augmented_data.index, self.augmented_data['mail_volume'], color='skyblue', label='Mail Volume', alpha=0.7)
+        ax2.tick_params(axis='y', labelcolor='skyblue')
+        fig.suptitle('Overall Daily Mail and Call Volumes', fontsize=18, fontweight='bold')
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.savefig(os.path.join(self.plots_dir, '01_overall_volumes_dual_axis.png'), dpi=self.config['DPI'])
         plt.close(fig)
 
-        # Plot 2: Call Volume by Intent
+        # Plot 2: Call Volume by Intent (FIXED with robust fallback)
         self.logger.info("Creating plot: Call Volume by Intent...")
-        try:
+        if 'intent' in self.call_df.columns:
             intent_summary = self.call_df.groupby([pd.Grouper(freq='W'), 'intent']).size().unstack(fill_value=0)
-            intent_summary.plot(kind='area', stacked=True, figsize=self.config['FIGURE_SIZE'], cmap='Paired', linewidth=0)
-            plt.title('Weekly Call Volume by Intent', fontsize=18, fontweight='bold')
-            plt.ylabel('Weekly Call Count')
-            plt.xlabel('Date')
-            plt.tight_layout()
-            plt.savefig(os.path.join(self.plots_dir, '02_call_volume_by_intent.png'), dpi=self.config['DPI'])
-            plt.close()
-        except Exception as e:
-            self.logger.warning(f"Could not create call intent plot. Check 'intent' column. Details: {e}")
+            if not intent_summary.empty:
+                intent_summary.plot(kind='area', stacked=True, figsize=self.config['FIGURE_SIZE'], cmap='Paired', linewidth=0)
+                plt.title('Weekly Call Volume by Intent', fontsize=18, fontweight='bold')
+                plt.ylabel('Weekly Call Count'); plt.xlabel('Date')
+                plt.tight_layout()
+                plt.savefig(os.path.join(self.plots_dir, '02_call_volume_by_intent.png'), dpi=self.config['DPI'])
+                plt.close()
+            else:
+                self.logger.warning("Skipping intent plot: No data available after grouping.")
+        else:
+            self.logger.warning("Skipping intent plot: 'intent' column not found in call data file.")
 
-        # Plot 3: Mail Volume by Type
+        # Plot 3: Mail Volume by Type (FIXED with robust fallback)
         self.logger.info("Creating plot: Mail Volume by Type...")
-        try:
+        if 'type' in self.mail_df.columns:
             mail_type_summary = self.mail_df.groupby([pd.Grouper(freq='W'), 'type'])['volume'].sum().unstack(fill_value=0)
-            mail_type_summary.plot(kind='line', style='--', marker='o', figsize=self.config['FIGURE_SIZE'], ms=4)
-            plt.title('Weekly Mail Volume by Type', fontsize=18, fontweight='bold')
-            plt.ylabel('Weekly Mail Volume')
-            plt.xlabel('Date')
-            plt.legend(title='Mail Type')
-            plt.tight_layout()
-            plt.savefig(os.path.join(self.plots_dir, '03_mail_volume_by_type.png'), dpi=self.config['DPI'])
-            plt.close()
-        except Exception as e:
-            self.logger.warning(f"Could not create mail type plot. Check 'type' column. Details: {e}")
+            if not mail_type_summary.empty:
+                mail_type_summary.plot(kind='line', style='--', marker='o', figsize=self.config['FIGURE_SIZE'], ms=4)
+                plt.title('Weekly Mail Volume by Type', fontsize=18, fontweight='bold')
+                plt.ylabel('Weekly Mail Volume'); plt.xlabel('Date')
+                plt.legend(title='Mail Type')
+                plt.tight_layout()
+                plt.savefig(os.path.join(self.plots_dir, '03_mail_volume_by_type.png'), dpi=self.config['DPI'])
+                plt.close()
+            else:
+                self.logger.warning("Skipping mail type plot: No data available after grouping.")
+        else:
+             self.logger.warning("Skipping mail type plot: 'type' column not found in mail data file.")
 
-        # Plot 4: Normalized Trend Comparison
+        # Plot 4: Normalized Trend Comparison (FIXED with rolling average for calls)
         self.logger.info("Creating plot: Normalized Trend Comparison...")
         scaler = MinMaxScaler()
         normalized_df = pd.DataFrame(scaler.fit_transform(self.augmented_data), columns=self.augmented_data.columns, index=self.augmented_data.index)
+        normalized_df['call_volume_rolling_7d'] = normalized_df['call_volume'].rolling(window=7, min_periods=1).mean()
         fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
-        for col in normalized_df.columns:
-            ax.plot(normalized_df.index, normalized_df[col], label=col.replace('_', ' ').title(), alpha=0.8)
+        ax.plot(normalized_df.index, normalized_df['call_volume_rolling_7d'], label='Call Volume (7-Day Rolling Avg)', color='blue', linewidth=2.5)
+        ax.plot(normalized_df.index, normalized_df['mail_volume'], label='Mail Volume', color='skyblue', linewidth=1.5, linestyle='--')
+        for col in self.config['FINANCIAL_DATA'].keys():
+            if col in normalized_df.columns:
+                ax.plot(normalized_df.index, normalized_df[col], label=col, linestyle=':', alpha=0.9)
         ax.set(title='Normalized Trends of All Data (Scaled 0-1)', xlabel='Date', ylabel='Normalized Value')
         ax.legend()
-        plt.savefig(os.path.join(self.plots_dir, '04_normalized_trends.png'), dpi=self.config['DPI'])
+        plt.savefig(os.path.join(self.plots_dir, '04_normalized_trends_readable.png'), dpi=self.config['DPI'])
         plt.close(fig)
 
-        # Plot 5: Data Augmentation Analysis
+        # Plot 5: Data Augmentation Analysis (FIXED to show extended timeline)
         self.logger.info("Creating plot: Data Augmentation Analysis...")
         fig, ax = plt.subplots(figsize=self.config['FIGURE_SIZE'])
-        ax.plot(self.daily_data.index, self.daily_data['call_volume'], label='Original Calls', color='blue', zorder=10)
+        ax.plot(self.augmented_data.index, self.augmented_data['call_volume'], label='Call Volume (including augmentation)', color='navy', zorder=10)
         if not self.augmented_dates.empty:
-            ax.plot(self.augmented_data.loc[self.augmented_dates].index, self.augmented_data.loc[self.augmented_dates]['call_volume'], 
-                    label='Augmented Call Data', color='red', linestyle='--', zorder=11, linewidth=2)
-        ax.set(title='Call Volume: Original vs. Augmented Data', xlabel='Date', ylabel='Call Volume')
+            highlight_df = self.augmented_data.loc[self.augmented_dates]
+            ax.plot(highlight_df.index, highlight_df['call_volume'], label='Augmented Data Section', color='red', linestyle='--', zorder=11, linewidth=2)
+        ax.set(title='Call Volume: Final Augmented Timeline', xlabel='Date', ylabel='Call Volume')
         ax.legend()
-        plt.savefig(os.path.join(self.plots_dir, '05_augmentation_analysis.png'), dpi=self.config['DPI'])
+        plt.savefig(os.path.join(self.plots_dir, '05_augmentation_analysis_corrected.png'), dpi=self.config['DPI'])
         plt.close(fig)
 
         # Plot 6: Feature Engineering Correlation Matrix
@@ -325,7 +321,6 @@ class EDAAnalyzer:
 # SCRIPT EXECUTION
 # =============================================================================
 if __name__ == '__main__':
-    # Initial file path check before starting the logger
     if not os.path.exists(CONFIG['MAIL_FILE_PATH']) or not os.path.exists(CONFIG['CALL_FILE_PATH']):
         print(f"\x1b[31;1mCRITICAL ERROR: Cannot find data files. Please check paths in CONFIG section.\x1b[0m")
         sys.exit(1)

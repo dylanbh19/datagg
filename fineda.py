@@ -10,6 +10,68 @@
 
 
 
+# In your CallVolumeAnalyzer class, replace the existing _create_financial_overlay_plot method with this one.
+
+def _create_financial_overlay_plot(self) -> bool:
+    """Creates a static plot comparing mail/call volume to NORMALISED financial indicators."""
+    if self.financial_data is None or self.financial_data.empty:
+        self.logger.warning("Skipping financial overlay plot: no financial data available.")
+        return False
+
+    # --- START OF NEW CODE: Normalization ---
+    # Create a copy to avoid modifying the original dataframe
+    normalized_financial_data = self.financial_data.copy()
+    
+    # Normalize each financial metric to a base of 100
+    for col in normalized_financial_data.columns:
+        # Find the first valid data point to use as the baseline
+        first_value = normalized_financial_data[col].dropna().iloc[0]
+        if first_value > 0:
+            normalized_financial_data[col] = (normalized_financial_data[col] / first_value) * 100
+    # --- END OF NEW CODE ---
+
+    fig, ax1 = plt.subplots(figsize=self.config['FIGURE_SIZE'])
+    
+    # Plot Mail and Call Volume on primary y-axis
+    ax1.set_xlabel('Date', fontsize=12)
+    ax1.set_ylabel('Mail & Call Volume', color='tab:blue', fontsize=12)
+    
+    # --- START OF MODIFICATION: Add Mail Data ---
+    # Add Mail data as a bar chart
+    ax1.bar(self.mail_data_clean['date'], self.mail_data_clean['volume'], color='lightsteelblue', label='Mail Volume', alpha=0.6)
+    # --- END OF MODIFICATION ---
+
+    ax1.plot(self.call_data_clean['date'], self.call_data_clean['volume'], color='tab:blue', label='Call Volume', linewidth=2)
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.grid(False) # Keep primary axis grid off for clarity
+
+    # Create a secondary y-axis for the NORMALIZED financial data
+    ax2 = ax1.twinx()
+    
+    # --- START OF MODIFICATION: Update axis label and plot normalized data ---
+    ax2.set_ylabel('Normalized Value (Base 100)', color='gray', fontsize=12)
+    colors = ['tab:red', 'tab:green', 'tab:purple']
+    for i, col in enumerate(normalized_financial_data.columns):
+        ax2.plot(normalized_financial_data.index, normalized_financial_data[col], color=colors[i % len(colors)], linestyle='--', alpha=0.8, label=col)
+    # --- END OF MODIFICATION ---
+    
+    ax2.tick_params(axis='y', labelcolor='gray')
+    ax2.axhline(100, color='gray', linestyle=':', linewidth=1, alpha=0.8) # Add a line for the base 100
+
+    fig.suptitle('Mail/Call Volume vs. Normalized Financial Trends', fontsize=16, fontweight='bold')
+    
+    # Combine legends from both axes into one box
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
+
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    plot_path = os.path.join(self.plots_dir, '12_financial_overlay.png')
+    plt.savefig(plot_path, dpi=self.config['DPI'])
+    plt.close()
+    
+    self.logger.info("✓ Financial overlay plot with normalized data has been created.")
+    return True
 
 
 

@@ -3,6 +3,9 @@
 # =============================================================================
 def main():
     """Main execution function."""
+    print("🔥 EXECUTIVE MARKETING INTELLIGENCE DASHBOARD")
+    print("=" * 60)
+    
     logger = setup_logging()
     try:
         # The main pipeline calls each function sequentially
@@ -10,8 +13,26 @@ def main():
         augmented_df, original_calls, synthetic_calls = augment_and_combine_data(call_data, mail_data, CONFIG, logger)
         final_df = feature_engineering(augmented_df, logger)
         
-        # The final dataframe and other components are passed to the dashboard
+        # Initialize the dashboard with the processed data
+        logger.info("🎨 Initializing executive dashboard...")
         app = build_dashboard(final_df, mail_data, call_data, original_calls, synthetic_calls)
+        
+        # --- START OF ADDED LOGGING ---
+        # Log a summary of the processed data before launching the server
+        logger.info("📊 DASHBOARD READY! Data Summary:")
+        logger.info("=" * 40)
+        logger.info(f"Mail records processed: {len(mail_data):,}")
+        logger.info(f"Call records processed: {len(call_data):,}")
+        logger.info(f"Total analysis records: {len(final_df):,}")
+        logger.info(f"Augmented records created: {len(synthetic_calls):,}")
+        
+        financial_indicators = [col for col in final_df.columns if col in CONFIG['FINANCIAL_DATA'].keys()]
+        if financial_indicators:
+            logger.info(f"Financial indicators loaded: {', '.join(financial_indicators)}")
+        
+        logger.info("=" * 40)
+        # --- END OF ADDED LOGGING ---
+
         app.run_server(debug=True)
         return True
 

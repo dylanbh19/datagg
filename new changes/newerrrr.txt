@@ -1,3 +1,829 @@
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f504' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2889, in main
+    dp.analyze_enhanced_correlations()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1177, in analyze_enhanced_correlations
+    self.logger.info("🔄 Analyzing enhanced correlations...")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🔄 Analyzing enhanced correlations...'
+Arguments: ()
+14:43:27 | INFO | Significant correlation found: mail_momentum_3d lag 20d = 0.160 (p=0.009)
+14:43:27 | INFO | Significant correlation found: mail_momentum_14d lag 4d = -0.151 (p=0.011)
+14:43:27 | INFO | Significant correlation found: mail_rolling_mean_7d lag 0d = -0.211 (p=0.000)
+14:43:27 | INFO | Significant correlation found: mail_rolling_mean_7d lag 2d = -0.226 (p=0.000)        
+14:43:27 | INFO | Significant correlation found: mail_rolling_mean_7d lag 4d = -0.251 (p=0.000)        
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 6d = -0.246 (p=0.000)        
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 8d = -0.226 (p=0.000)        
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 10d = -0.214 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 12d = -0.220 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 14d = -0.230 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 16d = -0.235 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 18d = -0.219 (p=0.000)
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_7d lag 20d = -0.190 (p=0.002)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 0d = -0.370 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 2d = -0.374 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 4d = -0.382 (p=0.000)
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 6d = -0.373 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 8d = -0.370 (p=0.000)       
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 10d = -0.358 (p=0.000)      
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 12d = -0.349 (p=0.000)      
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 14d = -0.341 (p=0.000)
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 16d = -0.329 (p=0.000)      
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 18d = -0.317 (p=0.000)      
+14:43:28 | INFO | Significant correlation found: mail_rolling_mean_14d lag 20d = -0.289 (p=0.000)      
+14:43:28 | INFO | ✅ Enhanced correlation analysis completed | Data: {"total_correlations": 121, "significant_correlations": 46, "best_correlation": -0.3817708619972869, "best_feature": "mail_rolling_mean_14d"}
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2889, in main
+    dp.analyze_enhanced_correlations()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1254, in analyze_enhanced_correlations
+    self.logger.info("✅ Enhanced correlation analysis completed", {
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 321, in info
+    self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+Message: '✅ Enhanced correlation analysis completed | Data: {"total_correlations": 121, "significant_correlations": 46, "best_correlation": -0.3817708619972869, "best_feature": "mail_rolling_mean_14d"}'   
+Arguments: ()
+14:43:28 | INFO | 🔄 Analyzing rolling correlation patterns...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f504' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2890, in main
+    dp.analyze_rolling_correlation()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1280, in analyze_rolling_correlation
+    self.logger.info("🔄 Analyzing rolling correlation patterns...")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🔄 Analyzing rolling correlation patterns...'
+Arguments: ()
+14:43:31 | INFO | ✅ Rolling correlation analysis completed | Data: {"total_windows": 1517, "lags_tested": 6, "window_size": 30, "summary_stats": {"lag_0d": {"mean": -0.17652625962406088, "std": 0.31915203673206466, "max": 0.7715346229973337, "min": -0.8432322947924075}, "lag_1d": {"mean": -0.17621931523104872, "std": 0.3230637987012185, "max": 0.7723171697545114, "min": -0.8427508941473336}, "lag_3d": {"mean": -0.1764075726648726, "std": 0.33191610614443895, "max": 0.7740592201004308, "min": -0.8417405359459534}, "lag_5d": {"mean": -0.17558800964534468, "std": 0.34104257346013267, "max": 0.8101804483371241, "min": -0.8480536230568501}, "lag_7d": {"mean": -0.17585892142555634, "std": 0.34988038531262056, "max": 0.836707136495966, "min": -0.8560904270945998}, "lag_14d": {"mean": -0.18492423069240843, "std": 0.39298100329773383, "max": 0.8893961944713438, "min": -0.8550234461872208}}}
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2890, in main
+    dp.analyze_rolling_correlation()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1363, in analyze_rolling_correlation
+    self.logger.info("✅ Rolling correlation analysis completed", {
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 321, in info
+    self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+Message: '✅ Rolling correlation analysis completed | Data: {"total_windows": 1517, "lags_tested": 6, "window_size": 30, "summary_stats": {"lag_0d": {"mean": -0.17652625962406088, "std": 0.31915203673206466, "max": 0.7715346229973337, "min": -0.8432322947924075}, "lag_1d": {"mean": -0.17621931523104872, "std": 0.3230637987012185, "max": 0.7723171697545114, "min": -0.8427508941473336}, "lag_3d": {"mean": -0.1764075726648726, "std": 0.33191610614443895, "max": 0.7740592201004308, "min": -0.8417405359459534}, "lag_5d": {"mean": -0.17558800964534468, "std": 0.34104257346013267, "max": 0.8101804483371241, "min": -0.8480536230568501}, "lag_7d": {"mean": -0.17585892142555634, "std": 0.34988038531262056, "max": 0.836707136495966, "min": -0.8560904270945998}, "lag_14d": {"mean": -0.18492423069240843, "std": 0.39298100329773383, "max": 0.8893961944713438, "min": -0.8550234461872208}}}'
+Arguments: ()
+14:43:31 | WARNING | Intent correlation analysis skipped - missing data or dependencies
+14:43:31 | INFO | ✅ Efficiency metrics calculated | Data: {"metrics_calculated": 13, "response_rate": "7.41%", "best_correlation": -0.3817708619972869, "data_quality_score": 95}
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2892, in main
+    dp.calculate_efficiency_metrics()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1560, in calculate_efficiency_metrics
+    self.logger.info("✅ Efficiency metrics calculated", {
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 321, in info
+    self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+Message: '✅ Efficiency metrics calculated | Data: {"metrics_calculated": 13, "response_rate": "7.41%", "best_correlation": -0.3817708619972869, "data_quality_score": 95}'
+Arguments: ()
+14:43:31 | INFO | 🎯 Phase 4: Advanced Features
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f3af' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2895, in main
+    logger.info("🎯 Phase 4: Advanced Features")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🎯 Phase 4: Advanced Features'
+Arguments: ()
+14:43:31 | INFO | 🔄 Detecting anomalies in communication patterns...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f504' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2896, in main
+    dp.detect_anomalies()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1711, in detect_anomalies
+    self.logger.info("🔄 Detecting anomalies in communication patterns...")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🔄 Detecting anomalies in communication patterns...'
+Arguments: ()
+14:43:31 | INFO | ✅ Anomaly detection completed | Data: {"total_anomalies": 29, "anomaly_rate": "10.1%", "most_anomalous_date": "2024-12-16", "features_used": ["call_volume", "mail_volume", "calls_per_1k_mails", "mail_momentum_3d", "mail_momentum_7d"]}
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2896, in main
+    dp.detect_anomalies()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1788, in detect_anomalies
+    self.logger.info("✅ Anomaly detection completed", {
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 321, in info
+    self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+Message: '✅ Anomaly detection completed | Data: {"total_anomalies": 29, "anomaly_rate": "10.1%", "most_anomalous_date": "2024-12-16", "features_used": ["call_volume", "mail_volume", "calls_per_1k_mails", "mail_momentum_3d", "mail_momentum_7d"]}'
+Arguments: ()
+14:43:31 | INFO | 🔄 Performing time series decomposition...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f504' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2897, in main
+    dp.perform_time_series_decomposition()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1812, in perform_time_series_decomposition
+    self.logger.info("🔄 Performing time series decomposition...")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🔄 Performing time series decomposition...'
+Arguments: ()
+14:43:31 | INFO | ✅ Call volume decomposition completed
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2897, in main
+    dp.perform_time_series_decomposition()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1842, in perform_time_series_decomposition
+    self.logger.info("✅ Call volume decomposition completed")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '✅ Call volume decomposition completed'
+Arguments: ()
+14:43:31 | INFO | ✅ Mail volume decomposition completed
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2897, in main
+    dp.perform_time_series_decomposition()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1863, in perform_time_series_decomposition
+    self.logger.info("✅ Mail volume decomposition completed")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '✅ Mail volume decomposition completed'
+Arguments: ()
+14:43:31 | INFO | ✅ Time series decomposition completed | Data: {"series_decomposed": 2, "decomposition_stats": {"call_volume": {"trend_strength": 0.9580995784763755, "seasonal_strength": 0.01576101362067151, "residual_strength": 0.2286750349639586}, "mail_volume": {"trend_strength": 0.5509237241699158, "seasonal_strength": 0.09026643285884625, "residual_strength": 0.81316211855089}}}
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2897, in main
+    dp.perform_time_series_decomposition()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 1880, in perform_time_series_decomposition
+    self.logger.info("✅ Time series decomposition completed", {
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 321, in info
+    self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+Message: '✅ Time series decomposition completed | Data: {"series_decomposed": 2, "decomposition_stats": {"call_volume": {"trend_strength": 0.9580995784763755, "seasonal_strength": 0.01576101362067151, "residual_strength": 0.2286750349639586}, "mail_volume": {"trend_strength": 0.5509237241699158, "seasonal_strength": 0.09026643285884625, "residual_strength": 0.81316211855089}}}'
+Arguments: ()
+14:43:31 | INFO | ✅ All processing phases completed successfully
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2899, in main
+    logger.info("✅ All processing phases completed successfully")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '✅ All processing phases completed successfully'
+Arguments: ()
+14:43:31 | INFO | 🎨 Initializing Premium Dashboard Application...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f3a8' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2906, in main
+    logger.info("🎨 Initializing Premium Dashboard Application...")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🎨 Initializing Premium Dashboard Application...'
+Arguments: ()
+14:43:31 | ERROR | ❌ Premium overview chart creation failed | Exception: 'PremiumVisualTheme' object has no attribute 'primary_purple'
+--- Logging error ---
+Traceback (most recent call last):
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2133, in create_premium_overview_chart
+    financial_colors = [self.theme.primary_purple, self.theme.primary_teal, self.theme.accent_gold]    
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PremiumVisualTheme' object has no attribute 'primary_purple'. Did you mean: 'primary_rose'?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 67: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2907, in main
+    dashboard = EnterpriseDashboardApp(dp)
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2791, in __init__
+    self.setup_layout()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2801, in setup_layout
+    dcc.Graph(id='main-chart', figure=self.viz.create_premium_overview_chart(self.dp.combined_df))     
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2273, in create_premium_overview_chart
+    self.logger.error("❌ Premium overview chart creation failed", e)
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 346, in error
+    self.logger.error(error_msg)
+Message: "❌ Premium overview chart creation failed | Exception: 'PremiumVisualTheme' object has no attribute 'primary_purple'"
+Arguments: ()
+14:43:32 | INFO | ✅ Enterprise Dashboard Application v3.0 initialized
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2907, in main
+    dashboard = EnterpriseDashboardApp(dp)
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2794, in __init__
+    self.logger.info("✅ Enterprise Dashboard Application v3.0 initialized")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '✅ Enterprise Dashboard Application v3.0 initialized'
+Arguments: ()
+14:43:32 | INFO | ================================================================================     
+14:43:32 | INFO | 📊 ENTERPRISE DASHBOARD v3.0 STATUS REPORT
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4ca' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2911, in main
+    logger.info("📊 ENTERPRISE DASHBOARD v3.0 STATUS REPORT")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '📊 ENTERPRISE DASHBOARD v3.0 STATUS REPORT'
+Arguments: ()
+14:43:32 | INFO | ================================================================================     
+14:43:32 | INFO | 📥 DATA SOURCES:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4e5' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2915, in main
+    logger.info("📥 DATA SOURCES:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '📥 DATA SOURCES:'
+Arguments: ()
+14:43:32 | INFO |    • Call Volume Data: ✅ LOADED (284 records)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 88: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2916, in main
+    logger.info(f"   • Call Volume Data: {'✅ LOADED' if dp.has_call_volume_data else '❌ MISSING'} ({len(dp.call_volume_df):,} records)")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Call Volume Data: ✅ LOADED (284 records)'
+Arguments: ()
+14:43:32 | INFO |    • Call Intent Data: ❌ MISSING (0 records)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 88: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2917, in main
+    logger.info(f"   • Call Intent Data: {'✅ LOADED' if dp.has_call_intent_data else '❌ MISSING'} ({len(dp.call_intent_df):,} records)")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Call Intent Data: ❌ MISSING (0 records)'
+Arguments: ()
+14:43:32 | INFO |    • Mail Data: ✅ LOADED (3,448 records)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 81: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2918, in main
+    logger.info(f"   • Mail Data: {'✅ LOADED' if dp.has_mail_data else '❌ MISSING'} ({len(dp.mail_df):,} records)")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Mail Data: ✅ LOADED (3,448 records)'
+Arguments: ()
+14:43:32 | INFO |    • Financial Data: ✅ LOADED (664 records)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 86: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2919, in main
+    logger.info(f"   • Financial Data: {'✅ LOADED' if dp.has_financial_data else '❌ MISSING'} ({len(dp.financial_df):,} records)")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Financial Data: ✅ LOADED (664 records)'
+Arguments: ()
+14:43:32 | INFO | ⚙️ DATA PROCESSING:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 65-66: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2922, in main
+    logger.info("⚙️ DATA PROCESSING:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '⚙️ DATA PROCESSING:'
+Arguments: ()
+14:43:32 | INFO |    • Combined Dataset: 288 business day records
+14:43:32 | INFO |    • Date Range: 2024-07-03 to 2025-05-30
+14:43:32 | INFO |    • Weekends Removed: 114
+14:43:32 | INFO |    • Holidays Removed: 0
+14:43:32 | INFO |    • Outliers Removed: 36
+14:43:32 | INFO | 🔬 ANALYTICS RESULTS:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f52c' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2930, in main
+    logger.info("🔬 ANALYTICS RESULTS:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🔬 ANALYTICS RESULTS:'
+Arguments: ()
+14:43:32 | INFO |    • Momentum Correlations: 121 calculated
+14:43:32 | INFO |    • Rolling Correlations: 1,517 windows analyzed
+14:43:32 | INFO |    • Intent Correlations: 0 intents analyzed
+14:43:32 | INFO |    • Anomalies Detected: 29 anomalous patterns
+14:43:32 | INFO |    • Time Series Decomposition: ✅ COMPLETED
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 97: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2935, in main
+    logger.info(f"   • Time Series Decomposition: {'✅ COMPLETED' if dp.decomposition_results else '❌ FAILED'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Time Series Decomposition: ✅ COMPLETED'
+Arguments: ()
+14:43:32 | INFO | 🎯 KEY INSIGHTS:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f3af' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2940, in main
+    logger.info("🎯 KEY INSIGHTS:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🎯 KEY INSIGHTS:'
+Arguments: ()
+14:43:32 | INFO |    • Best Correlation: -0.382 (mail_rolling_mean_14d)
+14:43:32 | INFO |    • Optimal Lag: 4 days
+14:43:32 | INFO |    • Feature Category: rolling_mean
+14:43:32 | INFO |    • Top 3 Correlations:
+14:43:32 | INFO |      1. mail_rolling_mean_14d (4d): -0.382
+14:43:32 | INFO |      2. mail_rolling_mean_14d (2d): -0.374
+14:43:32 | INFO |      3. mail_rolling_mean_14d (6d): -0.373
+14:43:32 | INFO | 📈 PERFORMANCE METRICS:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4c8' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2952, in main
+    logger.info("📈 PERFORMANCE METRICS:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '📈 PERFORMANCE METRICS:'
+Arguments: ()
+14:43:32 | INFO |    • Response Rate: 7.41%
+14:43:32 | INFO |    • Average Daily Calls: 3227
+14:43:32 | INFO |    • Average Daily Mail: 43537
+14:43:32 | INFO |    • Data Quality Score: 95%
+14:43:32 | INFO | 🎯 FEATURE STATUS:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f3af' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2959, in main
+    logger.info("🎯 FEATURE STATUS:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🎯 FEATURE STATUS:'
+Arguments: ()
+14:43:32 | INFO |    • Lag Analysis Heatmap: ✅ AVAILABLE
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 92: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2960, in main
+    logger.info(f"   • Lag Analysis Heatmap: {'✅ AVAILABLE' if dp.has_mail_data else '❌ REQUIRES MAIL DATA'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Lag Analysis Heatmap: ✅ AVAILABLE'
+Arguments: ()
+14:43:32 | INFO |    • Scatter Trend Analysis: ✅ AVAILABLE
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 94: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2961, in main
+    logger.info(f"   • Scatter Trend Analysis: {'✅ AVAILABLE' if len(dp.combined_df) > 10 else '❌ INSUFFICIENT DATA'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Scatter Trend Analysis: ✅ AVAILABLE'
+Arguments: ()
+14:43:32 | INFO |    • Time Series Decomposition: ✅ AVAILABLE
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 97: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2962, in main
+    logger.info(f"   • Time Series Decomposition: {'✅ AVAILABLE' if dp.decomposition_results else '❌ REQUIRES MORE DATA'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Time Series Decomposition: ✅ AVAILABLE'
+Arguments: ()
+14:43:32 | INFO |    • Anomaly Detection: ✅ AVAILABLE
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 89: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2963, in main
+    logger.info(f"   • Anomaly Detection: {'✅ AVAILABLE' if not dp.anomaly_data.empty else '❌ NO ANOMALIES DETECTED'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Anomaly Detection: ✅ AVAILABLE'
+Arguments: ()
+14:43:32 | INFO |    • Intent Analysis: ❌ REQUIRES INTENT DATA
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 87: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2964, in main
+    logger.info(f"   • Intent Analysis: {'✅ AVAILABLE' if dp.has_call_intent_data else '❌ REQUIRES INTENT DATA'}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '   • Intent Analysis: ❌ REQUIRES INTENT DATA'
+Arguments: ()
+14:43:32 | INFO | ================================================================================     
+14:43:32 | INFO | 🌐 DASHBOARD ACCESS:
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f310' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2967, in main
+    logger.info("🌐 DASHBOARD ACCESS:")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🌐 DASHBOARD ACCESS:'
+Arguments: ()
+14:43:32 | INFO |    • URL: http://127.0.0.1:8050
+14:43:32 | INFO |    • Status: Ready for executive presentation
+14:43:32 | INFO | 🛑 Press Ctrl+C to stop the dashboard
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f6d1' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2970, in main
+    logger.info("🛑 Press Ctrl+C to stop the dashboard")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🛑 Press Ctrl+C to stop the dashboard'
+Arguments: ()
+14:43:32 | INFO | ================================================================================     
+14:43:32 | INFO | 🚀 Starting Enterprise Dashboard v3.0 at http://127.0.0.1:8050
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 65: character maps to <undefined>
+Call stack:
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 3038, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2974, in main
+    dashboard.run(
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2811, in run
+    self.logger.info(f"🚀 Starting Enterprise Dashboard v3.0 at http://{host}:{port}")
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
+    self.logger.info(message)
+Message: '🚀 Starting Enterprise Dashboard v3.0 at http://127.0.0.1:8050'
+Arguments: ()
+Dash is running on http://127.0.0.1:8050/
+
+ * Serving Flask app 'eda'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:8050
+Press CTRL+C to quit
+127.0.0.1 - - [09/Jul/2025 14:43:33] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:34] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:37] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/dash/dcc/dash_core_components.js.map HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/dash/dcc/dash_core_components-shared.js.map HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/dash/html/dash_html_components.min.js.map HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/dash/dash_table/bundle.js.map HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-layout HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-dependencies HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_favicon.ico?v=3.1.1 HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/dash/dcc/async-graph.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:38] "GET /_dash-component-suites/plotly/package_data/plotly.min.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:39] "GET /_dash-component-suites/dash/dcc/async-graph.js.map HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 14:43:40] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:43] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 14:43:46] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/20
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

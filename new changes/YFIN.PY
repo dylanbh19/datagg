@@ -1,84 +1,69 @@
-Of course. I can help you fix those issues.
+Of course. Let's go back to the two core improvements: the performance fix to make your plots generate faster and the logging fix to see exactly where time is being spent.
 
-The `yfinance` error is a common pandas issue when the structure of the data you're downloading doesn't match the structure you're merging it into. The slow loading of the first visual is almost certainly caused by rendering too many individual markers on a line chart.
+Here are the two additions combined into one solution.
 
-Here are the specific fixes for your script.
+### 1\. The Performance Fix: Replace Slow Bar Charts
 
------
+The primary cause of the slowdown is rendering a `go.Bar` chart with thousands of data points. The fix is to replace it with a `go.Scatter` chart that uses a fill to *look* like a bar chart but renders instantly.
 
-### 1\. Fix for the `yfinance` Merge Error
+### 2\. The Logging Fix: Pinpoint Slow Operations
 
-The error "not allowed to merge between different levels" happens because `yfinance` can return a DataFrame with a MultiIndex on the columns, especially when fetching multiple tickers. Your current code fetches tickers one by one in a loop, which is inefficient and likely causing this issue.
-
-A much better approach is to download all financial data at once and then process it.
-
-#### **Action:**
-
-Replace the entire `add_financial_data` function with this more robust version. It downloads all tickers in a single request and correctly handles the resulting DataFrame.
-
-```python
-def add_financial_data(df, config):
-    """Adds financial data to the dataframe."""
-    if not FINANCIAL_AVAILABLE or df.empty:
-        return df
-    
-    LOGGER.info("--- Adding Financial Data ---")
-    start_date = df['date'].min() - timedelta(days=5)
-    end_date = df['date'].max() + timedelta(days=5)
-    
-    # Get tickers and their friendly names from config
-    tickers = list(config['FINANCIAL_DATA'].values())
-    names = list(config['FINANCIAL_DATA'].keys())
-    ticker_to_name_map = dict(zip(tickers, names))
-
-    try:
-        # --- EFFICIENT CHANGE: Download all tickers at once ---
-        fin_data = yf.download(tickers, start=start_date, end=end_date, progress=False)
-        
-        if fin_data.empty:
-            LOGGER.warning("Financial data download returned an empty dataframe.")
-            return df
-
-        # --- ROBUST FIX: Isolate 'Close' prices and handle single/multi ticker cases ---
-        close_prices = fin_data['Close']
-        
-        # If only one ticker is downloaded, it returns a Series; convert it to a DataFrame
-        if isinstance(close_prices, pd.Series):
-            close_prices = close_prices.to_frame(name=tickers[0])
-
-        # Rename columns from ticker symbols (e.g., '^GSPC') to friendly names (e.g., 'S&P 500')
-        close_prices = close_prices.rename(columns=ticker_to_name_map)
-        
-        # --- CORRECTED MERGE: Merge the clean data ---
-        df = pd.merge(df, close_prices, left_on='date', right_index=True, how='left')
-        
-        # Forward-fill and back-fill any missing values for all new columns
-        for name in names:
-            if name in df.columns:
-                df[name] = df[name].ffill().bfill()
-        
-        LOGGER.info(f"✅ Successfully added financial data for: {', '.join(names)}")
-
-    except Exception as e:
-        LOGGER.warning(f"Could not download or process financial data: {e}")
-    
-    return df
-```
+To see exactly how long each plot takes to save, we'll add a log message right before and after the `save_plot()` function is called. This will tell you precisely which plot is the bottleneck.
 
 -----
 
-### 2\. Fix for Slow Plot Rendering
+### \#\# Combined Code Example
 
-The first visual (`create_and_save_overlay_plot`) is slow because you are drawing a scatter plot with both lines and markers (`mode='lines+markers'`) for the raw call volume. If you have hundreds or thousands of data points, rendering a unique marker for each point is computationally expensive and slows down generation significantly.
-
-#### **Action:**
-
-In the `create_and_save_overlay_plot` function, change the `mode` for the 'Daily Calls' trace from `lines+markers` to just `lines`. The line itself is enough to show the trend.
-
-**Find this block of code:**
+Here is the updated `create_and_save_overlay_plot` function with **both fixes applied**. You can use this as a template for your other plotting functions.
 
 ```python
-# Inside create_and_save_overlay_plot()
+### VISUAL 1: Enhanced Overlay Timeline ###
+def create_and_save_overlay_plot(df, config):
+    """Creates and saves an enhanced overlay plot with better readability."""
+    LOGGER.info("--- Creating Visual 1: Enhanced Overlay Timeline ---")
+    
+    if df.empty:
+        LOGGER.warning("No data for overlay plot.")
+        return
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.7, 0.3],
+        vertical_spacing=0.1,
+        subplot_titles=('📊 Normalized Communications & Market Trends', '📈 Raw Daily Volumes'),
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
+    )
+
+    colors = config['THEME_COLORS']
+
+    # ... (The code for the top plot with normalized data remains the same) ...
+    # Top plot: Normalized data
+    if 'mail_volume_norm' in df.columns:
+        fig.add_trace(...) # This part is unchanged
+
+    if 'call_volume_norm' in df.columns:
+        fig.add_trace(...) # This part is unchanged
+    
+    # Add financial data
+    # ... (This part is unchanged) ...
+
+
+    # --- 🚀 PERFORMANCE FIX APPLIED HERE 🚀 ---
+    # Bottom plot: Raw volumes
+    # This go.Bar(...) has been replaced with the faster go.Scatter(...) below.
+    fig.add_trace(
+        go.Scatter(
+            x=df['date'],
+            y=df['mail_volume'],
+            name='Daily Mail',
+            mode='lines',
+            line=dict(width=0.5, color=colors['mail']),
+            fill='tozeroy',  # Fills the area to look like a bar/area chart
+            fillcolor='rgba(52, 152, 219, 0.7)', # Set your desired color and opacity
+            yaxis='y3'
+        ),
+        row=2, col=1
+    )
 
     fig.add_trace(
         go.Scatter(
@@ -86,30 +71,41 @@ In the `create_and_save_overlay_plot` function, change the `mode` for the 'Daily
             y=df['call_volume'],
             name='Daily Calls',
             line=dict(color=colors['calls'], width=3),
-            mode='lines+markers',  # <--- THIS IS THE SLOW PART
-            marker=dict(size=6),
+            mode='lines', # Changed from 'lines+markers' for speed
             yaxis='y3'
         ),
         row=2, col=1
     )
+
+    # ... (The fig.update_layout code remains the same) ...
+    fig.update_layout(...)
+
+
+    # --- 🔍 LOGGING FIX APPLIED HERE 🔍 ---
+    LOGGER.info("Building complete. Now rendering '1_enhanced_overlay_trends.png'...")
+    
+    save_plot(fig, "1_enhanced_overlay_trends.png", config['OUTPUT_DIR'])
+
+    LOGGER.info("✅ Visual 1 finished.")
+
 ```
 
-**And change `mode='lines+markers'` to `mode='lines'` like this:**
+### \#\# Your Next Steps
 
-```python
-# Inside create_and_save_overlay_plot()
+1.  **Update `create_and_save_overlay_plot`**: Replace your entire function with the code block above. This will fix the performance and add logging for the first plot.
 
-    fig.add_trace(
-        go.Scatter(
-            x=df['date'],
-            y=df['call_volume'],
-            name='Daily Calls',
-            line=dict(color=colors['calls'], width=3),
-            mode='lines',  # <--- FIXED: Much faster rendering
-            yaxis='y3'
-        ),
-        row=2, col=1
-    )
-```
+2.  **Add Logging to Other Functions**: You don't need a performance fix for the other plots, but you should add the logging. Go to each of the other three plotting functions (`create_and_save_lag_correlation_plot`, etc.) and add a log message right before the `save_plot()` call.
 
-By making these two changes, your script should now run without the merge error and generate the plots much more quickly.
+    **Example for Visual 2:**
+
+    ```python
+    def create_and_save_lag_correlation_plot(df, config):
+        # ... (all the code to build the figure) ...
+
+        # Add this line
+        LOGGER.info("Building complete. Now rendering '2_enhanced_lag_correlation.png'...")
+
+        save_plot(fig, "2_enhanced_lag_correlation.png", config['OUTPUT_DIR'])
+    ```
+
+By applying these two changes, your script will run much faster, and the logs will clearly show you the time taken for each plot to save.

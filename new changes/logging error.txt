@@ -1,3 +1,17 @@
+AttributeError: 'EnterpriseLogger' object has no attribute 'info'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2959, in <module>
+    success = main()
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2908, in main
+    logger.critical("❌ Critical system failure", e)
+    ^^^^^^^^^^^^^^^
+AttributeError: 'EnterpriseLogger' object has no attribute 'critical'
+
+
+
 To fix the `TypeError` in your `logging error.txt` file, you need to adjust how the `EnterpriseLogger` class is initialized and how its `__init__` method uses the provided configuration.
 
 [cite\_start]The error "TypeError: EnterpriseLogger.**init**() takes 2 positional arguments but 3 were given" [cite: 1] indicates that when you call `EnterpriseLogger`, you are passing too many arguments.

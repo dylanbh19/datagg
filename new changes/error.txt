@@ -1,4 +1,78 @@
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 516, in safe_date_conversion
+
+# =============================================================================
+# ENTERPRISE DASHBOARD APPLICATION v3.0
+# =============================================================================
+
+class EnterpriseDashboardApp:
+    """
+    Enterprise-grade dashboard application with premium UX/UI
+    """
+    
+    def __init__(self, data_processor: EnterpriseDataProcessor):
+        self.dp = data_processor
+        self.logger = data_processor.logger
+        self.theme = THEME
+        self.config = ENTERPRISE_CONFIG
+        
+        if not DASH_AVAILABLE:
+            self.logger.error("❌ Dash framework not available - cannot create dashboard")
+            raise ImportError("Dash framework required for dashboard")
+        
+        # Initialize Dash app with premium theme
+        self.app = dash.Dash(
+            __name__,
+            external_stylesheets=[dbc.themes.BOOTSTRAP],
+        )
+        
+        self.app.title = "Customer Communications Intelligence v3.0"
+        
+        # Initialize visualization suite
+        self.viz = PremiumDashboardVisualizations(data_processor)
+        
+        # Setup dashboard
+        self.setup_layout()
+        self.setup_callbacks()
+        
+        self.logger.info("✅ Enterprise Dashboard Application v3.0 initialized")
+    
+    def setup_layout(self):
+        """Setup basic dashboard layout"""
+        self.app.layout = html.Div([
+            html.H1("Customer Communications Intelligence v3.0"),
+            html.P("Dashboard loading..."),
+            dcc.Graph(id='main-chart', figure=self.viz.create_premium_overview_chart(self.dp.combined_df))
+        ])
+    
+    def setup_callbacks(self):
+        """Setup basic callbacks"""
+        pass
+    
+    def run(self, debug: bool = False, port: int = 8050, host: str = '127.0.0.1'):
+        """Run the dashboard"""
+        try:
+            self.logger.info(f"🚀 Starting Enterprise Dashboard v3.0 at http://{host}:{port}")
+            self.app.run(debug=debug, port=port, host=host)
+        except Exception as e:
+            self.logger.error("❌ Dashboard failed to start", e)
+            raise
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 516, in safe_date_conversion
     self.logger.error(f"❌ Could not convert {date_column} to datetime in {data_type}")
   File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 346, in error
     self.logger.error(error_msg)

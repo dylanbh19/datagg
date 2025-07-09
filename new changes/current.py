@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Customer Communications Intelligence Plot Generator v1.1
-Fixed version with proper date column handling and enhanced readability.
+Customer Communications Intelligence Plot Generator v1.2
+Performance and logging enhancements included.
 """
 
 # --- Core Libraries ---
@@ -346,14 +346,17 @@ def create_and_save_overlay_plot(df, config):
             )
             financial_added = True
 
-    # Bottom plot: Raw volumes
+    # --- 🚀 PERFORMANCE FIX APPLIED HERE 🚀 ---
+    # Bottom plot: Raw volumes using faster Scatter instead of Bar
     fig.add_trace(
-        go.Bar(
+        go.Scatter(
             x=df['date'],
             y=df['mail_volume'],
             name='Daily Mail',
-            marker_color=colors['mail'],
-            opacity=0.7,
+            mode='lines',
+            line=dict(width=0.5, color=colors['mail']),
+            fill='tozeroy',  # Fills the area to look like a bar/area chart
+            fillcolor='rgba(52, 152, 219, 0.7)', # Explicit color with opacity
             yaxis='y3'
         ),
         row=2, col=1
@@ -398,7 +401,11 @@ def create_and_save_overlay_plot(df, config):
     fig.update_yaxes(title_text="<b>Volume</b>", row=2, col=1)
     fig.update_xaxes(title_text="<b>Date</b>", row=2, col=1)
 
+    # --- 🔍 LOGGING FIX APPLIED HERE 🔍 ---
+    LOGGER.info("Building complete. Now rendering '1_enhanced_overlay_trends.png'...")
     save_plot(fig, "1_enhanced_overlay_trends.png", config['OUTPUT_DIR'])
+    LOGGER.info("✅ Visual 1 finished.")
+
 
 ### VISUAL 2: Enhanced Lag Correlation ###
 def create_and_save_lag_correlation_plot(df, config):
@@ -476,7 +483,10 @@ def create_and_save_lag_correlation_plot(df, config):
         margin=dict(t=120, b=80, l=80, r=80)
     )
 
+    LOGGER.info("Building complete. Now rendering '2_enhanced_lag_correlation.png'...")
     save_plot(fig, "2_enhanced_lag_correlation.png", config['OUTPUT_DIR'])
+    LOGGER.info("✅ Visual 2 finished.")
+
 
 ### VISUAL 3: Enhanced Intent Correlation ###
 def create_and_save_intent_correlation_plot(config):
@@ -589,8 +599,11 @@ def create_and_save_intent_correlation_plot(config):
         font=dict(size=config['FONT_SIZE']),
         margin=dict(t=120, b=80, l=300, r=80)
     )
-
+    
+    LOGGER.info("Building complete. Now rendering '3_enhanced_intent_correlations.png'...")
     save_plot(fig, "3_enhanced_intent_correlations.png", config['OUTPUT_DIR'])
+    LOGGER.info("✅ Visual 3 finished.")
+
 
 ### VISUAL 4: Combined Summary Dashboard ###
 def create_and_save_summary_dashboard(df, config):
@@ -720,14 +733,16 @@ def create_and_save_summary_dashboard(df, config):
         margin=dict(t=120, b=60, l=80, r=80)
     )
 
+    LOGGER.info("Building complete. Now rendering '4_summary_dashboard.png'...")
     save_plot(fig, "4_summary_dashboard.png", config['OUTPUT_DIR'])
+    LOGGER.info("✅ Visual 4 finished.")
 
 # =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 if __name__ == '__main__':
     LOGGER = setup_logging()
-    LOGGER.info("🚀 Starting Customer Communications Plot Generator v1.1...")
+    LOGGER.info("🚀 Starting Customer Communications Plot Generator v1.2...")
 
     # Create output directory
     os.makedirs(CONFIG['OUTPUT_DIR'], exist_ok=True)
@@ -768,7 +783,7 @@ if __name__ == '__main__':
     LOGGER.info("=" * 60)
     LOGGER.info("📈 PLOT 1: Enhanced Overlay Trends")
     LOGGER.info("   • Top panel: Normalized mail/call volumes + financial indicators")
-    LOGGER.info("   • Bottom panel: Raw daily volumes (bar chart + line)")
+    LOGGER.info("   • Bottom panel: Raw daily volumes (area chart + line for performance)")
     LOGGER.info("   • Shows patterns and correlations over time")
     LOGGER.info("")
     LOGGER.info("📊 PLOT 2: Enhanced Lag Correlation")

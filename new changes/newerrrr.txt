@@ -1,3 +1,95 @@
+It looks like you're encountering two main types of errors in your Python script:
+
+### 1\. UnicodeEncodeError
+
+This error, `UnicodeEncodeError: 'charmap' codec can't encode character...`, occurs because your console's default encoding (likely `cp1252`) cannot display certain Unicode characters, specifically the emojis like `🔄` (U+1F504), `✅` (U+2705), `🎯` (U+1F3AF), `🎨` (U+1F3A8), `📊` (U+1F4CA), and `📥` (U+1F4E5) that your logger is trying to print.
+
+**How to Fix:**
+
+You can resolve this by ensuring your logger outputs to a stream that supports UTF-8 encoding. You can modify the logging setup in your `EnterpriseLogger` class (or where your logger is configured) to use `encoding='utf-8'` for file handlers or configure your console to support UTF-8.
+
+For a file-based logger, you would modify your `EnterpriseLogger` class similar to this (assuming you are using a `FileHandler`):
+
+```python
+import logging
+import os
+
+class EnterpriseLogger:
+    def __init__(self, config: Dict):
+        self.log_file = config["LOG_FILE_PATH"]
+        self.logger = logging.getLogger(config["LOG_NAME"])
+        self.logger.setLevel(logging.INFO)
+
+        # Create handlers
+        c_handler = logging.StreamHandler()
+        f_handler = logging.FileHandler(self.log_file, encoding='utf-8') # Add encoding here
+
+        # Create formatters and add it to handlers
+        c_format = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+        f_format = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+        c_handler.setFormatter(c_format)
+        f_handler.setFormatter(f_format)
+
+        # Add handlers to the logger
+        self.logger.addHandler(c_handler)
+        self.logger.addHandler(f_handler)
+
+        self.logger.info(f"🚀 Logger initialized. Log file: {os.path.abspath(self.log_file)}")
+```
+
+If the logging is primarily to the console, you might need to configure your terminal program to use UTF-8. In many modern terminals, UTF-8 is the default, but if you are running in an older environment or a specific IDE, you might need to adjust its settings.
+
+### 2\. AttributeError: 'PremiumVisualTheme' object has no attribute 'primary\_purple'
+
+This error message indicates that your `PremiumVisualTheme` class does not have an attribute named `primary_purple`. The helpful suggestion "Did you mean: 'primary\_rose'?" points directly to the solution. It means that in your `PremiumVisualTheme` class, the color you're trying to access as `primary_purple` is actually named `primary_rose`.
+
+**How to Fix:**
+
+You need to change all instances where `self.theme.primary_purple` is used to `self.theme.primary_rose` in the `create_premium_overview_chart` function and any other relevant parts of your code. For example, at `eda.py` line 2133, you would change:
+
+```python
+financial_colors = [self.theme.primary_purple, self.theme.primary_teal, self.theme.accent_gold]
+```
+
+to:
+
+```python
+financial_colors = [self.theme.primary_rose, self.theme.primary_teal, self.theme.accent_gold]
+```
+
+By addressing these two issues, your script should be able to run without these specific errors.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Traceback (most recent call last):
   File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
     stream.write(msg + self.terminator)

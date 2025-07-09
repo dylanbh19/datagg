@@ -23,6 +23,244 @@ PS C:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis 
    • Financial data normalization and proper scaling
    • Top 10 + Other grouping for cleaner visualizations
 ================================================================================
+15:16:50 | INFO | 🚀 Logger initialized. Log file: C:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\logs\dashboard.log
+15:16:50 | INFO | 🏗️ Initializing Enterprise Data Processor v3.0...
+15:16:50 | INFO | Enterprise Data Processor v3.0 initialized
+15:16:50 | INFO | 📥 Phase 1: Data Loading
+15:16:50 | INFO | 🔄 Loading primary call volume data...
+15:16:54 | INFO | ✅ Call Volume Data loaded successfully | Data: {"file_path": "data\\GenesysExtract_20250703.csv", "records": 1043025, "columns": 25, "encoding": "utf-8", "file_size_mb": 132.89}
+15:16:54 | INFO | Date conversion completed for call volume | Data: {"success_rate": "100.0%", "valid_records": 1043025, "original_records": 1043025, "date_range": "2024-01-01 to 2025-07-03"}
+15:16:55 | INFO | ✅ Call volume data loaded successfully | Data: {"total_records": 284, "date_range": "2024-06-03 to 2025-07-03", "avg_daily_volume": "3199.7", "filtered_out": 266}
+15:16:55 | INFO | 🔄 Loading secondary call intent data...
+15:17:04 | INFO | ✅ Call Intent Data loaded successfully | Data: {"file_path": "data\\GenesysExtract_20250609.csv", "records": 1053601, "columns": 42, "encoding": "utf-8", "file_size_mb": 307.2}
+15:17:06 | ERROR | ❌ Could not convert ConversationStart to datetime in call intent
+15:17:08 | WARNING | Insufficient call intent data: 0 records
+15:17:08 | INFO | 🔄 Loading mail data...
+15:17:10 | INFO | ✅ Mail Data loaded successfully | Data: {"file_path": "merged_output.csv", "records": 1414794, "columns": 4, "encoding": "utf-8", "file_size_mb": 107.72}
+15:17:10 | INFO | Date conversion completed for mail | Data: {"success_rate": "0.4%", "valid_records": 5014, "original_records": 1414794, "date_range": "2024-07-03 to 2025-05-30"}
+15:17:10 | INFO | Filtered mail data to call dates: 5014 records (was 5014)
+15:17:10 | INFO | ✅ Mail data loaded successfully | Data: {"total_records": 3448, "unique_types": 20, "date_range": "2024-07-03 to 2025-05-30", "total_volume": "17,035,835", "avg_daily_volume": "4940.8", "filtered_out": 1566}
+15:17:10 | INFO | 🔄 Loading financial indicator data...
+15:17:10 | INFO | Loading financial data from 2024-05-29 to 2025-07-04
+15:17:10 | INFO | Fetching S&P 500 (^GSPC)...
+15:17:10 | INFO | ✅ S&P 500: 401 data points loaded
+15:17:10 | INFO | Fetching 10-Year Treasury (^TNX)...
+15:17:10 | INFO | ✅ 10-Year Treasury: 401 data points loaded
+15:17:10 | INFO | Fetching VIX (^VIX)...
+15:17:11 | INFO | ✅ VIX: 401 data points loaded
+15:17:11 | INFO | Fetching Dollar Index (DX-Y.NYB)...
+15:17:11 | INFO | ✅ Dollar Index: 401 data points loaded
+15:17:11 | INFO | Fetching Gold (GC=F)...
+15:17:11 | INFO | ✅ Gold: 401 data points loaded
+15:17:11 | INFO | Fetching Oil (CL=F)...
+15:17:11 | INFO | ✅ Oil: 401 data points loaded
+15:17:11 | INFO | ✅ Financial data loaded successfully | Data: {"indicators": 6, "total_records": 664, "date_range": "2024-05-29 to 2025-07-03", "indicators_loaded": ["S&P 500", "10-Year Treasury", "VIX", "Dollar Index", "Gold", "Oil"]}
+15:17:11 | INFO | ⚙️ Phase 2: Data Combination and Processing
+15:17:11 | INFO | 🔄 Combining and processing data...
+15:17:11 | INFO | Inner join result: 146 records with both call and mail data
+15:17:11 | INFO | Added 6 financial indicators
+15:17:11 | INFO | Removed 2 outliers from call_volume
+15:17:11 | INFO | Removed 34 outliers from mail_volume
+15:17:11 | INFO | ✅ Data combination completed successfully | Data: {"final_records": 288, "date_range": "2024-07-03 to 2025-05-30", "features_created": 18, "data_quality": {"total_records_processed": 0, "records_after_filtering": 288, "weekends_removed": 114, "holidays_removed": "0", "outliers_removed": "36", "missing_data_imputed": 0}}
+15:17:11 | INFO | 🔬 Phase 3: Advanced Analytics
+15:17:11 | INFO | 🔄 Analyzing enhanced correlations...
+15:17:11 | INFO | Significant correlation found: mail_momentum_3d lag 20d = 0.160 (p=0.009)
+15:17:11 | INFO | Significant correlation found: mail_momentum_14d lag 4d = -0.151 (p=0.011)
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 0d = -0.211 (p=0.000)
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 2d = -0.226 (p=0.000)        
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 4d = -0.251 (p=0.000)        
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 6d = -0.246 (p=0.000)        
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 8d = -0.226 (p=0.000)        
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 10d = -0.214 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 12d = -0.220 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 14d = -0.230 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 16d = -0.235 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 18d = -0.219 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_7d lag 20d = -0.190 (p=0.002)
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 0d = -0.370 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 2d = -0.374 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 4d = -0.382 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 6d = -0.373 (p=0.000)       
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 8d = -0.370 (p=0.000)
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 10d = -0.358 (p=0.000)      
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 12d = -0.349 (p=0.000)      
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 14d = -0.341 (p=0.000)      
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 16d = -0.329 (p=0.000)      
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 18d = -0.317 (p=0.000)      
+15:17:11 | INFO | Significant correlation found: mail_rolling_mean_14d lag 20d = -0.289 (p=0.000)
+15:17:11 | INFO | ✅ Enhanced correlation analysis completed | Data: {"total_correlations": 121, "significant_correlations": 46, "best_correlation": -0.3817708619972869, "best_feature": "mail_rolling_mean_14d"}
+15:17:11 | INFO | 🔄 Analyzing rolling correlation patterns...
+15:17:14 | INFO | ✅ Rolling correlation analysis completed | Data: {"total_windows": 1517, "lags_tested": 6, "window_size": 30, "summary_stats": {"lag_0d": {"mean": -0.17652625962406088, "std": 0.31915203673206466, "max": 0.7715346229973337, "min": -0.8432322947924075}, "lag_1d": {"mean": -0.17621931523104872, "std": 0.3230637987012185, "max": 0.7723171697545114, "min": -0.8427508941473336}, "lag_3d": {"mean": -0.1764075726648726, "std": 0.33191610614443895, "max": 0.7740592201004308, "min": -0.8417405359459534}, "lag_5d": {"mean": -0.17558800964534468, "std": 0.34104257346013267, "max": 0.8101804483371241, "min": -0.8480536230568501}, "lag_7d": {"mean": -0.17585892142555634, "std": 0.34988038531262056, "max": 0.836707136495966, "min": -0.8560904270945998}, "lag_14d": {"mean": -0.18492423069240843, "std": 0.39298100329773383, "max": 0.8893961944713438, "min": -0.8550234461872208}}}
+15:17:14 | WARNING | Intent correlation analysis skipped - missing data or dependencies
+15:17:14 | INFO | ✅ Efficiency metrics calculated | Data: {"metrics_calculated": 13, "response_rate": "7.41%", "best_correlation": -0.3817708619972869, "data_quality_score": 95}
+15:17:14 | INFO | 🎯 Phase 4: Advanced Features
+15:17:14 | INFO | 🔄 Detecting anomalies in communication patterns...
+15:17:14 | INFO | ✅ Anomaly detection completed | Data: {"total_anomalies": 29, "anomaly_rate": "10.1%", "most_anomalous_date": "2024-12-16", "features_used": ["call_volume", "mail_volume", "calls_per_1k_mails", "mail_momentum_3d", "mail_momentum_7d"]}
+15:17:14 | INFO | 🔄 Performing time series decomposition...
+15:17:14 | INFO | ✅ Call volume decomposition completed
+15:17:14 | INFO | ✅ Mail volume decomposition completed
+15:17:14 | INFO | ✅ Time series decomposition completed | Data: {"series_decomposed": 2, "decomposition_stats": {"call_volume": {"trend_strength": 0.9580995784763755, "seasonal_strength": 0.01576101362067151, "residual_strength": 0.2286750349639586}, "mail_volume": {"trend_strength": 0.5509237241699158, "seasonal_strength": 0.09026643285884625, "residual_strength": 0.81316211855089}}}
+15:17:14 | INFO | ✅ All processing phases completed successfully
+15:17:14 | INFO | 🎨 Initializing Premium Dashboard Application...
+15:17:15 | ERROR | ❌ Premium overview chart creation failed | Exception: plotly.graph_objs._figure.Figure.update_layout() got multiple values for keyword argument 'title'
+Traceback (most recent call last):
+  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2263, in create_premium_overview_chart
+    fig.update_layout(
+    ~~~~~~~~~~~~~~~~~^
+        title={
+        ^^^^^^^
+    ...<21 lines>...
+        **self.base_layout
+        ^^^^^^^^^^^^^^^^^^
+    )
+    ^
+TypeError: plotly.graph_objs._figure.Figure.update_layout() got multiple values for keyword argument 'title'
+15:17:15 | INFO | ✅ Enterprise Dashboard Application v3.0 initialized
+15:17:15 | INFO | ================================================================================     
+15:17:15 | INFO | 📊 ENTERPRISE DASHBOARD v3.0 STATUS REPORT
+15:17:15 | INFO | ================================================================================     
+15:17:15 | INFO | 📥 DATA SOURCES:
+15:17:15 | INFO |    • Call Volume Data: ✅ LOADED (284 records)
+15:17:15 | INFO |    • Call Intent Data: ❌ MISSING (0 records)
+15:17:15 | INFO |    • Mail Data: ✅ LOADED (3,448 records)
+15:17:15 | INFO |    • Financial Data: ✅ LOADED (664 records)
+15:17:15 | INFO | ⚙️ DATA PROCESSING:
+15:17:15 | INFO |    • Combined Dataset: 288 business day records
+15:17:15 | INFO |    • Date Range: 2024-07-03 to 2025-05-30
+15:17:15 | INFO |    • Weekends Removed: 114
+15:17:15 | INFO |    • Holidays Removed: 0
+15:17:15 | INFO |    • Outliers Removed: 36
+15:17:15 | INFO | 🔬 ANALYTICS RESULTS:
+15:17:15 | INFO |    • Momentum Correlations: 121 calculated
+15:17:15 | INFO |    • Rolling Correlations: 1,517 windows analyzed
+15:17:15 | INFO |    • Intent Correlations: 0 intents analyzed
+15:17:15 | INFO |    • Anomalies Detected: 29 anomalous patterns
+15:17:15 | INFO |    • Time Series Decomposition: ✅ COMPLETED
+15:17:15 | INFO | 🎯 KEY INSIGHTS:
+15:17:15 | INFO |    • Best Correlation: -0.382 (mail_rolling_mean_14d)
+15:17:15 | INFO |    • Optimal Lag: 4 days
+15:17:15 | INFO |    • Feature Category: rolling_mean
+15:17:15 | INFO |    • Top 3 Correlations:
+15:17:15 | INFO |      1. mail_rolling_mean_14d (4d): -0.382
+15:17:15 | INFO |      2. mail_rolling_mean_14d (2d): -0.374
+15:17:15 | INFO |      3. mail_rolling_mean_14d (6d): -0.373
+15:17:15 | INFO | 📈 PERFORMANCE METRICS:
+15:17:15 | INFO |    • Response Rate: 7.41%
+15:17:15 | INFO |    • Average Daily Calls: 3227
+15:17:15 | INFO |    • Average Daily Mail: 43537
+15:17:15 | INFO |    • Data Quality Score: 95%
+15:17:15 | INFO | 🎯 FEATURE STATUS:
+15:17:15 | INFO |    • Lag Analysis Heatmap: ✅ AVAILABLE
+15:17:15 | INFO |    • Scatter Trend Analysis: ✅ AVAILABLE
+15:17:15 | INFO |    • Time Series Decomposition: ✅ AVAILABLE
+15:17:15 | INFO |    • Anomaly Detection: ✅ AVAILABLE
+15:17:15 | INFO |    • Intent Analysis: ❌ REQUIRES INTENT DATA
+15:17:15 | INFO | ================================================================================     
+15:17:15 | INFO | 🌐 DASHBOARD ACCESS:
+15:17:15 | INFO |    • URL: http://127.0.0.1:8050
+15:17:15 | INFO |    • Status: Ready for executive presentation
+15:17:15 | INFO | 🛑 Press Ctrl+C to stop the dashboard
+15:17:15 | INFO | ================================================================================     
+15:17:15 | INFO | 🚀 Starting Enterprise Dashboard v3.0 at http://127.0.0.1:8050
+Dash is running on http://127.0.0.1:8050/
+
+ * Serving Flask app 'eda'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:8050
+Press CTRL+C to quit
+127.0.0.1 - - [09/Jul/2025 15:17:16] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:19] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:22] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:25] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:28] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:31] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:32] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:32] "GET /_dash-layout HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:32] "GET /_dash-dependencies HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:32] "GET /_dash-component-suites/dash/dcc/async-graph.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 15:17:32] "GET /_dash-component-suites/plotly/package_data/plotly.min.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 15:17:34] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET /_dash-layout HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET /_dash-dependencies HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET /_favicon.ico?v=3.1.1 HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET /_dash-component-suites/dash/dcc/async-graph.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 15:17:36] "GET /_dash-component-suites/plotly/package_data/plotly.min.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/Jul/2025 15:17:37] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:40] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:43] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:46] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:49] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:52] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:55] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:17:58] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:01] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:04] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:07] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:10] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:13] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:16] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:19] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:22] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:25] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:28] "GET /_reload-hash HTTP/1.1" 200 -
+127.0.0.1 - - [09/Jul/2025 15:18:31] "GET /_reload-hash HTTP/1.1" 200 -
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PS C:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent> & C:/Users/BhungarD/python.exe "c:/Users/BhungarD/OneDrive - Computershare/Desktop/prod - mail call analysis and intent/eda.py"
+🔍 SYSTEM PRE-FLIGHT CHECK:
+==================================================
+   Plotly         : ✅ AVAILABLE
+   Dash           : ✅ AVAILABLE
+   SciPy          : ✅ AVAILABLE
+   Scikit-learn   : ✅ AVAILABLE
+   Statsmodels    : ✅ AVAILABLE
+   yfinance       : ✅ AVAILABLE
+==================================================
+✅ All critical dependencies available!
+🚀 Starting Enterprise Dashboard v3.0...
+
+🔥 CUSTOMER COMMUNICATIONS INTELLIGENCE DASHBOARD v3.0
+================================================================================
+🎯 ENTERPRISE FEATURES:
+   • Dual call data source management (volume + intents)
+   • Mail data filtered to call data presence
+   • 4 NEW advanced plots: Lag Analysis, Scatter Trends, Time Series Decomposition, Anomaly Detection  
+   • Premium UX/UI with enhanced styling and interactivity
+   • Production-grade error handling and logging
+   • Enhanced correlation analysis with multiple feature types
+   • Financial data normalization and proper scaling
+   • Top 10 + Other grouping for cleaner visualizations
+================================================================================
 15:06:28 | INFO | 🚀 Logger initialized. Log file: C:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\logs\dashboard.log
 15:06:28 | INFO | 🏗️ Initializing Enterprise Data Processor v3.0...
 15:06:28 | INFO | Enterprise Data Processor v3.0 initialized

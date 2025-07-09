@@ -1,3 +1,171 @@
+import logging
+import json
+import os
+import sys # Import sys for StreamHandler
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional
+from enum import Enum # Assuming LogLevel is an Enum
+
+# Ensure LogLevel Enum is defined as it's used in EnterpriseLogger
+class LogLevel(Enum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+class EnterpriseLogger:
+    """Production-grade logging system with comprehensive monitoring"""
+    
+    def __init__(self, config: Dict):
+        # Retrieve configuration values
+        self.name = config.get("LOG_NAME", "CustomerCommsDashboard")
+        self.level_enum = config.get("LOG_LEVEL", LogLevel.INFO)
+        self.log_file_path = config.get("LOG_FILE_PATH", f"logs/{self.name}_{datetime.now().strftime('%Y%m%d')}.log")
+
+        self.logger = logging.getLogger(self.name)
+        # Set logger level using the logging module's constants
+        self.logger.setLevel(getattr(logging, self.level_enum.value))
+        
+        # Initialize counters for errors and warnings
+        self.error_count = 0
+        self.warning_count = 0
+
+        # Clear existing handlers to prevent duplicate log messages
+        if self.logger.handlers:
+            for handler in list(self.logger.handlers):
+                self.logger.removeHandler(handler)
+        
+        # Create formatters
+        detailed_formatter = logging.Formatter(
+            '%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        console_formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)s | %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        
+        # Console handler (outputs to stdout, typically the terminal)
+        # Set encoding to 'utf-8' for console output to handle emojis
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, self.level_enum.value)) # Set handler level
+        console_handler.setFormatter(console_formatter)
+        self.logger.addHandler(console_handler)
+        
+        # File handler for persistence
+        try:
+            log_dir = Path(self.log_file_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True) # Ensure log directory exists
+            
+            # Use 'utf-8' encoding for the file handler to prevent UnicodeEncodeError
+            file_handler = logging.FileHandler(
+                self.log_file_path,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(logging.DEBUG) # File handler typically logs all debug messages
+            file_handler.setFormatter(detailed_formatter)
+            self.logger.addHandler(file_handler)
+            
+        except Exception as e:
+            # Log this warning through the console handler if file handler fails
+            self.logger.warning(f"Could not create file handler: {e}")
+        
+        self.logger.info(f"🚀 Logger initialized. Log file: {os.path.abspath(self.log_file_path)}")
+    
+    def debug(self, message: str, extra_data: Optional[Dict] = None):
+        """Debug level logging with optional structured data"""
+        if extra_data:
+            try:
+                self.logger.debug(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+            except TypeError:
+                self.logger.debug(f"{message} | Data: {str(extra_data)}")
+        else:
+            self.logger.debug(message)
+    
+    def info(self, message: str, extra_data: Optional[Dict] = None):
+        """Info level logging with optional structured data"""
+        if extra_data:
+            try:
+                self.logger.info(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+            except TypeError:
+                self.logger.info(f"{message} | Data: {str(extra_data)}")
+        else:
+            self.logger.info(message)
+    
+    def warning(self, message: str, extra_data: Optional[Dict] = None):
+        """Warning level logging with tracking"""
+        self.warning_count += 1
+        if extra_data:
+            try:
+                self.logger.warning(f"{message} | Data: {json.dumps(extra_data, default=str)}")
+            except TypeError:
+                self.logger.warning(f"{message} | Data: {str(extra_data)}")
+        else:
+            self.logger.warning(message)
+    
+    def error(self, message: str, exception: Optional[Exception] = None, extra_data: Optional[Dict] = None):
+        """Error level logging with exception tracking"""
+        self.error_count += 1
+        error_msg = message
+        
+        if exception:
+            error_msg += f" | Exception: {str(exception)}"
+            # traceback.format_exc() is typically used when you want to get the traceback string
+            # and log it explicitly. logging.exception() automatically includes traceback.
+            # For this structured logging, we'll just include the exception string.
+            # If you want full traceback with every error, use logging.exception(error_msg)
+            # or add traceback.format_exc() conditionally.
+            # For now, let's keep it clean as per your original error method structure.
+            # If ENTERPRISE_CONFIG['DEBUG_MODE'] is true, you could add traceback explicitly.
+            
+        if extra_data:
+            try:
+                error_msg += f" | Data: {json.dumps(extra_data, default=str)}"
+            except TypeError:
+                error_msg += f" | Data: {str(extra_data)}"
+        
+        self.logger.error(error_msg, exc_info=exception is not None) # exc_info=True logs the current exception traceback
+    
+    def critical(self, message: str, exception: Optional[Exception] = None, extra_data: Optional[Dict] = None):
+        """Critical level logging for system failures"""
+        self.error_count += 1 # Critical errors also count as errors
+        critical_msg = message
+        
+        if exception:
+            critical_msg += f" | Exception: {str(exception)}"
+            # Similar to error, logging.critical with exc_info=True will include traceback
+            
+        if extra_data:
+            try:
+                critical_msg += f" | Data: {json.dumps(extra_data, default=str)}"
+            except TypeError:
+                critical_msg += f" | Data: {str(extra_data)}"
+        
+        self.logger.critical(critical_msg, exc_info=exception is not None)
+    
+    def get_stats(self) -> Dict:
+        """Get logging statistics"""
+        return {
+            'error_count': self.error_count,
+            'warning_count': self.warning_count,
+            'log_level': self.level_enum.value
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
 class EnterpriseLogger:
     def __init__(self, config: Dict):
         self.log_file = config["LOG_FILE_PATH"]

@@ -542,1068 +542,1356 @@ class EnterpriseDataProcessor:
         except Exception as e:
             self.logger.error(f"❌ Date conversion failed for {data_type}", e)
             return df
-def load_call_volume_data(self) -> bool:
+    def load_call_volume_data(self) -> bool:
+            """
+            Load primary call volume data (Date column) - used for correlations and overlays
+            """
+            self.logger.info("🔄 Loading primary call volume data...")
+            
+            try:
+                # Load call volume file
+                self.call_volume_df = self.safe_load_csv(
+                    self.config['CALL_VOLUME_FILE'], 
+                    "Call Volume Data"
+                )
+                
+                if self.call_volume_df.empty:
+                    self.logger.warning("❌ No call volume data loaded")
+                    return False
+                
+                # Map columns
+                date_col = self.config['CALL_VOLUME_COLUMNS']['date']
+                volume_col = self.config['CALL_VOLUME_COLUMNS'].get('volume', None)
+                
+                # Validate required columns exist
+                if date_col not in self.call_volume_df.columns:
+                    self.logger.error(f"Date column '{date_col}' not found in call volume data")
+                    return False
+                
+                # Convert date column
+                self.call_volume_df = self.safe_date_conversion(
+                    self.call_volume_df, date_col, "call volume"
+                )
+                
+                if self.call_volume_df.empty:
+                    self.logger.error("❌ No valid dates in call volume data")
+                    return False
+                
+                # Rename columns for consistency
+                self.call_volume_df = self.call_volume_df.rename(columns={
+                    date_col: 'date'
+                })
+                
+                # Handle call volume column
+                if volume_col in self.call_volume_df.columns:
+                    # If explicit volume column exists, use it
+                    self.call_volume_df = self.call_volume_df.rename(columns={
+                        volume_col: 'call_volume'
+                    })
+                else:
+                    # If no volume column, count daily occurrences
+                    self.call_volume_df = (self.call_volume_df
+                                        .groupby('date')
+                                        .size()
+                                        .reset_index(name='call_volume'))
+                
+                # Convert volume to numeric and validate
+                self.call_volume_df['call_volume'] = pd.to_numeric(
+                    self.call_volume_df['call_volume'], errors='coerce'
+                )
+                self.call_volume_df = self.call_volume_df.dropna(subset=['call_volume'])
+                
+                # Filter by date range
+                start_date = pd.to_datetime(self.config['DATA_START_DATE'])
+                original_len = len(self.call_volume_df)
+                self.call_volume_df = self.call_volume_df[
+                    self.call_volume_df['date'] >= start_date
+                ]
+                
+                # Remove weekends and holidays if configured
+                if self.config['FILTER_WEEKENDS']:
+                    weekend_count = len(self.call_volume_df[self.call_volume_df['date'].dt.weekday >= 5])
+                    self.call_volume_df = self.call_volume_df[
+                        self.call_volume_df['date'].dt.weekday < 5
+                    ]
+                    self.data_quality_metrics['weekends_removed'] += weekend_count
+                
+                if self.config['FILTER_HOLIDAYS']:
+                    holiday_mask = self.call_volume_df['date'].dt.date.isin(self.us_holidays)
+                    holiday_count = holiday_mask.sum()
+                    self.call_volume_df = self.call_volume_df[~holiday_mask]
+                    self.data_quality_metrics['holidays_removed'] += holiday_count
+                
+                # Final validation
+                if len(self.call_volume_df) < self.config['MIN_SAMPLE_SIZE']:
+                    self.logger.warning(f"Insufficient call volume data: {len(self.call_volume_df)} records")
+                    return False
+                
+                self.has_call_volume_data = True
+                self.logger.info("✅ Call volume data loaded successfully", {
+                    'total_records': len(self.call_volume_df),
+                    'date_range': f"{self.call_volume_df['date'].min().date()} to {self.call_volume_df['date'].max().date()}",
+                    'avg_daily_volume': f"{self.call_volume_df['call_volume'].mean():.1f}",
+                    'filtered_out': original_len - len(self.call_volume_df)
+                })
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error("❌ Failed to load call volume data", e)
+                return False
+        
+    def load_call_intent_data(self) -> bool:
         """
-        Load primary call volume data (Date column) - used for correlations and overlays
+        Load secondary call intent data (ConversationStart, uui_Intent) - used for intent analysis only
         """
-        self.logger.info("🔄 Loading primary call volume data...")
+        self.logger.info("🔄 Loading secondary call intent data...")
         
         try:
-            # Load call volume file
-            self.call_volume_df = self.safe_load_csv(
-                self.config['CALL_VOLUME_FILE'], 
-                "Call Volume Data"
+            # Load call intent file
+            self.call_intent_df = self.safe_load_csv(
+                self.config['CALL_INTENTS_FILE'], 
+                "Call Intent Data"
             )
             
-            if self.call_volume_df.empty:
-                self.logger.warning("❌ No call volume data loaded")
+            if self.call_intent_df.empty:
+                self.logger.warning("❌ No call intent data loaded")
                 return False
             
             # Map columns
-            date_col = self.config['CALL_VOLUME_COLUMNS']['date']
-            volume_col = self.config['CALL_VOLUME_COLUMNS']['volume']
+            date_col = self.config['CALL_INTENT_COLUMNS']['date']
+            intent_col = self.config['CALL_INTENT_COLUMNS']['intent']
             
             # Validate required columns exist
-            if date_col not in self.call_volume_df.columns:
-                self.logger.error(f"Date column '{date_col}' not found in call volume data")
+            required_cols = [date_col, intent_col]
+            missing_cols = [col for col in required_cols if col not in self.call_intent_df.columns]
+            
+            if missing_cols:
+                self.logger.error(f"Missing columns in intent data: {missing_cols}")
                 return False
             
             # Convert date column
-            self.call_volume_df = self.safe_date_conversion(
-                self.call_volume_df, date_col, "call volume"
+            self.call_intent_df = self.safe_date_conversion(
+                self.call_intent_df, date_col, "call intent"
             )
             
-            if self.call_volume_df.empty:
-                self.logger.error("❌ No valid dates in call volume data")
+            if self.call_intent_df.empty:
+                self.logger.error("❌ No valid dates in call intent data")
                 return False
             
             # Rename columns for consistency
-            self.call_volume_df = self.call_volume_df.rename(columns={
-                date_col: 'date'
+            self.call_intent_df = self.call_intent_df.rename(columns={
+                date_col: 'date',
+                intent_col: 'intent'
             })
             
-            # Handle call volume column
-            if volume_col in self.call_volume_df.columns:
-                # If explicit volume column exists, use it
-                self.call_volume_df = self.call_volume_df.rename(columns={
-                    volume_col: 'call_volume'
-                })
-            else:
-                # If no volume column, count daily occurrences
-                self.call_volume_df = (self.call_volume_df
-                                     .groupby('date')
-                                     .size()
-                                     .reset_index(name='call_volume'))
-            
-            # Convert volume to numeric and validate
-            self.call_volume_df['call_volume'] = pd.to_numeric(
-                self.call_volume_df['call_volume'], errors='coerce'
-            )
-            self.call_volume_df = self.call_volume_df.dropna(subset=['call_volume'])
+            # Clean intent data
+            self.call_intent_df['intent'] = self.call_intent_df['intent'].astype(str).str.strip()
+            self.call_intent_df = self.call_intent_df[
+                (self.call_intent_df['intent'] != '') & 
+                (self.call_intent_df['intent'].notna()) &
+                (self.call_intent_df['intent'] != 'nan')
+            ]
             
             # Filter by date range
             start_date = pd.to_datetime(self.config['DATA_START_DATE'])
-            original_len = len(self.call_volume_df)
-            self.call_volume_df = self.call_volume_df[
-                self.call_volume_df['date'] >= start_date
+            original_len = len(self.call_intent_df)
+            self.call_intent_df = self.call_intent_df[
+                self.call_intent_df['date'] >= start_date
             ]
             
             # Remove weekends and holidays if configured
             if self.config['FILTER_WEEKENDS']:
-                weekend_count = len(self.call_volume_df[self.call_volume_df['date'].dt.weekday >= 5])
-                self.call_volume_df = self.call_volume_df[
-                    self.call_volume_df['date'].dt.weekday < 5
+                self.call_intent_df = self.call_intent_df[
+                    self.call_intent_df['date'].dt.weekday < 5
                 ]
-                self.data_quality_metrics['weekends_removed'] += weekend_count
             
             if self.config['FILTER_HOLIDAYS']:
-                holiday_mask = self.call_volume_df['date'].dt.date.isin(self.us_holidays)
-                holiday_count = holiday_mask.sum()
-                self.call_volume_df = self.call_volume_df[~holiday_mask]
-                self.data_quality_metrics['holidays_removed'] += holiday_count
+                holiday_mask = self.call_intent_df['date'].dt.date.isin(self.us_holidays)
+                self.call_intent_df = self.call_intent_df[~holiday_mask]
+            
+            # Create intent summaries
+            self.calls_by_intent = (self.call_intent_df
+                                    .groupby('intent')
+                                    .size()
+                                    .reset_index(name='count')
+                                    .sort_values('count', ascending=False))
             
             # Final validation
-            if len(self.call_volume_df) < self.config['MIN_SAMPLE_SIZE']:
-                self.logger.warning(f"Insufficient call volume data: {len(self.call_volume_df)} records")
+            if len(self.call_intent_df) < self.config['MIN_SAMPLE_SIZE']:
+                self.logger.warning(f"Insufficient call intent data: {len(self.call_intent_df)} records")
                 return False
             
-            self.has_call_volume_data = True
-            self.logger.info("✅ Call volume data loaded successfully", {
-                'total_records': len(self.call_volume_df),
-                'date_range': f"{self.call_volume_df['date'].min().date()} to {self.call_volume_df['date'].max().date()}",
-                'avg_daily_volume': f"{self.call_volume_df['call_volume'].mean():.1f}",
-                'filtered_out': original_len - len(self.call_volume_df)
+            self.has_call_intent_data = True
+            self.logger.info("✅ Call intent data loaded successfully", {
+                'total_records': len(self.call_intent_df),
+                'unique_intents': len(self.calls_by_intent),
+                'date_range': f"{self.call_intent_df['date'].min().date()} to {self.call_intent_df['date'].max().date()}",
+                'top_intent': self.calls_by_intent.iloc[0]['intent'] if not self.calls_by_intent.empty else 'None',
+                'filtered_out': original_len - len(self.call_intent_df)
             })
             
             return True
             
         except Exception as e:
-            self.logger.error("❌ Failed to load call volume data", e)
+            self.logger.error("❌ Failed to load call intent data", e)
             return False
-    
-def load_call_intent_data(self) -> bool:
-    """
-    Load secondary call intent data (ConversationStart, uui_Intent) - used for intent analysis only
-    """
-    self.logger.info("🔄 Loading secondary call intent data...")
-    
-    try:
-        # Load call intent file
-        self.call_intent_df = self.safe_load_csv(
-            self.config['CALL_INTENTS_FILE'], 
-            "Call Intent Data"
-        )
-        
-        if self.call_intent_df.empty:
-            self.logger.warning("❌ No call intent data loaded")
-            return False
-        
-        # Map columns
-        date_col = self.config['CALL_INTENT_COLUMNS']['date']
-        intent_col = self.config['CALL_INTENT_COLUMNS']['intent']
-        
-        # Validate required columns exist
-        required_cols = [date_col, intent_col]
-        missing_cols = [col for col in required_cols if col not in self.call_intent_df.columns]
-        
-        if missing_cols:
-            self.logger.error(f"Missing columns in intent data: {missing_cols}")
-            return False
-        
-        # Convert date column
-        self.call_intent_df = self.safe_date_conversion(
-            self.call_intent_df, date_col, "call intent"
-        )
-        
-        if self.call_intent_df.empty:
-            self.logger.error("❌ No valid dates in call intent data")
-            return False
-        
-        # Rename columns for consistency
-        self.call_intent_df = self.call_intent_df.rename(columns={
-            date_col: 'date',
-            intent_col: 'intent'
-        })
-        
-        # Clean intent data
-        self.call_intent_df['intent'] = self.call_intent_df['intent'].astype(str).str.strip()
-        self.call_intent_df = self.call_intent_df[
-            (self.call_intent_df['intent'] != '') & 
-            (self.call_intent_df['intent'].notna()) &
-            (self.call_intent_df['intent'] != 'nan')
-        ]
-        
-        # Filter by date range
-        start_date = pd.to_datetime(self.config['DATA_START_DATE'])
-        original_len = len(self.call_intent_df)
-        self.call_intent_df = self.call_intent_df[
-            self.call_intent_df['date'] >= start_date
-        ]
-        
-        # Remove weekends and holidays if configured
-        if self.config['FILTER_WEEKENDS']:
-            self.call_intent_df = self.call_intent_df[
-                self.call_intent_df['date'].dt.weekday < 5
-            ]
-        
-        if self.config['FILTER_HOLIDAYS']:
-            holiday_mask = self.call_intent_df['date'].dt.date.isin(self.us_holidays)
-            self.call_intent_df = self.call_intent_df[~holiday_mask]
-        
-        # Create intent summaries
-        self.calls_by_intent = (self.call_intent_df
-                                .groupby('intent')
-                                .size()
-                                .reset_index(name='count')
-                                .sort_values('count', ascending=False))
-        
-        # Final validation
-        if len(self.call_intent_df) < self.config['MIN_SAMPLE_SIZE']:
-            self.logger.warning(f"Insufficient call intent data: {len(self.call_intent_df)} records")
-            return False
-        
-        self.has_call_intent_data = True
-        self.logger.info("✅ Call intent data loaded successfully", {
-            'total_records': len(self.call_intent_df),
-            'unique_intents': len(self.calls_by_intent),
-            'date_range': f"{self.call_intent_df['date'].min().date()} to {self.call_intent_df['date'].max().date()}",
-            'top_intent': self.calls_by_intent.iloc[0]['intent'] if not self.calls_by_intent.empty else 'None',
-            'filtered_out': original_len - len(self.call_intent_df)
-        })
-        
-        return True
-        
-    except Exception as e:
-        self.logger.error("❌ Failed to load call intent data", e)
-        return False
 
-def load_mail_data(self) -> bool:
-    """
-    Load mail data and filter to only include dates with call data
-    """
-    self.logger.info("🔄 Loading mail data...")
-    
-    try:
-        # Load mail file
-        self.mail_df = self.safe_load_csv(
-            self.config['MAIL_FILE_PATH'], 
-            "Mail Data"
-        )
+    def load_mail_data(self) -> bool:
+        """
+        Load mail data and filter to only include dates with call data
+        """
+        self.logger.info("🔄 Loading mail data...")
         
-        if self.mail_df.empty:
-            self.logger.warning("❌ No mail data loaded")
-            return False
-        
-        # Map columns
-        date_col = self.config['MAIL_COLUMNS']['date']
-        volume_col = self.config['MAIL_COLUMNS']['volume']
-        type_col = self.config['MAIL_COLUMNS']['type']
-        
-        # Validate required columns exist
-        required_cols = [date_col, volume_col]
-        missing_cols = [col for col in required_cols if col not in self.mail_df.columns]
-        
-        if missing_cols:
-            self.logger.error(f"Missing columns in mail data: {missing_cols}")
-            return False
-        
-        # Convert date column
-        self.mail_df = self.safe_date_conversion(
-            self.mail_df, date_col, "mail"
-        )
-        
-        if self.mail_df.empty:
-            self.logger.error("❌ No valid dates in mail data")
-            return False
-        
-        # Rename columns for consistency
-        column_mapping = {
-            date_col: 'date',
-            volume_col: 'volume'
-        }
-        if type_col in self.mail_df.columns:
-            column_mapping[type_col] = 'type'
-        
-        self.mail_df = self.mail_df.rename(columns=column_mapping)
-        
-        # Convert volume to numeric and validate
-        self.mail_df['volume'] = pd.to_numeric(
-            self.mail_df['volume'], errors='coerce'
-        )
-        self.mail_df = self.mail_df.dropna(subset=['volume'])
-        
-        # Filter by date range
-        start_date = pd.to_datetime(self.config['DATA_START_DATE'])
-        original_len = len(self.mail_df)
-        self.mail_df = self.mail_df[
-            self.mail_df['date'] >= start_date
-        ]
-        
-        # Remove weekends and holidays if configured
-        if self.config['FILTER_WEEKENDS']:
+        try:
+            # Load mail file
+            self.mail_df = self.safe_load_csv(
+                self.config['MAIL_FILE_PATH'], 
+                "Mail Data"
+            )
+            
+            if self.mail_df.empty:
+                self.logger.warning("❌ No mail data loaded")
+                return False
+            
+            # Map columns
+            date_col = self.config['MAIL_COLUMNS']['date']
+            volume_col = self.config['MAIL_COLUMNS']['volume']
+            type_col = self.config['MAIL_COLUMNS']['type']
+            
+            # Validate required columns exist
+            required_cols = [date_col, volume_col]
+            missing_cols = [col for col in required_cols if col not in self.mail_df.columns]
+            
+            if missing_cols:
+                self.logger.error(f"Missing columns in mail data: {missing_cols}")
+                return False
+            
+            # Convert date column
+            self.mail_df = self.safe_date_conversion(
+                self.mail_df, date_col, "mail"
+            )
+            
+            if self.mail_df.empty:
+                self.logger.error("❌ No valid dates in mail data")
+                return False
+            
+            # Rename columns for consistency
+            column_mapping = {
+                date_col: 'date',
+                volume_col: 'volume'
+            }
+            if type_col in self.mail_df.columns:
+                column_mapping[type_col] = 'type'
+            
+            self.mail_df = self.mail_df.rename(columns=column_mapping)
+            
+            # Convert volume to numeric and validate
+            self.mail_df['volume'] = pd.to_numeric(
+                self.mail_df['volume'], errors='coerce'
+            )
+            self.mail_df = self.mail_df.dropna(subset=['volume'])
+            
+            # Filter by date range
+            start_date = pd.to_datetime(self.config['DATA_START_DATE'])
+            original_len = len(self.mail_df)
             self.mail_df = self.mail_df[
-                self.mail_df['date'].dt.weekday < 5
+                self.mail_df['date'] >= start_date
             ]
+            
+            # Remove weekends and holidays if configured
+            if self.config['FILTER_WEEKENDS']:
+                self.mail_df = self.mail_df[
+                    self.mail_df['date'].dt.weekday < 5
+                ]
+            
+            if self.config['FILTER_HOLIDAYS']:
+                holiday_mask = self.mail_df['date'].dt.date.isin(self.us_holidays)
+                self.mail_df = self.mail_df[~holiday_mask]
+            
+            # CRITICAL: Filter mail data to only include dates with call data
+            if self.has_call_volume_data:
+                call_dates = set(self.call_volume_df['date'].dt.date)
+                before_filter = len(self.mail_df)
+                self.mail_df = self.mail_df[
+                    self.mail_df['date'].dt.date.isin(call_dates)
+                ]
+                self.logger.info(f"Filtered mail data to call dates: {len(self.mail_df)} records (was {before_filter})")
+            
+            # Remove low volume days
+            min_volume = self.config['MIN_MAIL_VOLUME']
+            self.mail_df = self.mail_df[self.mail_df['volume'] >= min_volume]
+            
+            # Create mail type summaries
+            if 'type' in self.mail_df.columns:
+                self.mail_by_type = (self.mail_df
+                                    .groupby('type')['volume']
+                                    .sum()
+                                    .reset_index()
+                                    .sort_values('volume', ascending=False))
+            else:
+                self.mail_by_type = pd.DataFrame({'type': ['Unknown'], 'volume': [self.mail_df['volume'].sum()]})
+            
+            # Final validation
+            if len(self.mail_df) < self.config['MIN_SAMPLE_SIZE']:
+                self.logger.warning(f"Insufficient mail data: {len(self.mail_df)} records")
+                return False
+            
+            self.has_mail_data = True
+            self.logger.info("✅ Mail data loaded successfully", {
+                'total_records': len(self.mail_df),
+                'unique_types': len(self.mail_by_type),
+                'date_range': f"{self.mail_df['date'].min().date()} to {self.mail_df['date'].max().date()}",
+                'total_volume': f"{self.mail_df['volume'].sum():,.0f}",
+                'avg_daily_volume': f"{self.mail_df['volume'].mean():.1f}",
+                'filtered_out': original_len - len(self.mail_df)
+            })
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error("❌ Failed to load mail data", e)
+            return False
+
+    def load_financial_data(self) -> bool:
+        """
+        Load financial indicator data for market correlation analysis
+        """
+        if not FINANCIAL_AVAILABLE:
+            self.logger.info("📊 Financial data loading skipped - yfinance not available")
+            return False
         
-        if self.config['FILTER_HOLIDAYS']:
-            holiday_mask = self.mail_df['date'].dt.date.isin(self.us_holidays)
-            self.mail_df = self.mail_df[~holiday_mask]
+        self.logger.info("🔄 Loading financial indicator data...")
         
-        # CRITICAL: Filter mail data to only include dates with call data
-        if self.has_call_volume_data:
-            call_dates = set(self.call_volume_df['date'].dt.date)
-            before_filter = len(self.mail_df)
-            self.mail_df = self.mail_df[
-                self.mail_df['date'].dt.date.isin(call_dates)
-            ]
-            self.logger.info(f"Filtered mail data to call dates: {len(self.mail_df)} records (was {before_filter})")
+        try:
+            # Determine date range from existing data
+            if self.has_call_volume_data:
+                start_date = self.call_volume_df['date'].min() - timedelta(days=5)
+                end_date = self.call_volume_df['date'].max() + timedelta(days=1)
+            elif self.has_mail_data:
+                start_date = self.mail_df['date'].min() - timedelta(days=5)
+                end_date = self.mail_df['date'].max() + timedelta(days=1)
+            else:
+                start_date = pd.to_datetime(self.config['DATA_START_DATE'])
+                end_date = datetime.now()
+            
+            self.logger.info(f"Loading financial data from {start_date.date()} to {end_date.date()}")
+            
+            financial_data = {}
+            successful_loads = 0
+            
+            for name, ticker in self.config['FINANCIAL_INDICATORS'].items():
+                try:
+                    self.logger.info(f"Fetching {name} ({ticker})...")
+                    
+                    ticker_obj = yf.Ticker(ticker)
+                    data = ticker_obj.history(
+                        start=start_date, 
+                        end=end_date,
+                        interval='1d',
+                        auto_adjust=True,
+                        prepost=False
+                    )
+                    
+                    if not data.empty and 'Close' in data.columns:
+                        # Resample to daily and forward fill
+                        close_prices = data['Close'].resample('D').last().ffill()
+                        
+                        if len(close_prices) > 10:  # Minimum data points
+                            # Calculate percentage change from first value (normalized)
+                            first_price = close_prices.iloc[0]
+                            if first_price > 0:
+                                pct_change = ((close_prices - first_price) / first_price * 100)
+                                financial_data[name] = pct_change
+                                successful_loads += 1
+                                self.logger.info(f"✅ {name}: {len(close_prices)} data points loaded")
+                            else:
+                                self.logger.warning(f"Invalid first price for {name}: {first_price}")
+                    else:
+                        self.logger.warning(f"No valid data for {name}")
+                        
+                except Exception as e:
+                    self.logger.warning(f"Failed to fetch {name}: {e}")
+                    continue
+            
+            if successful_loads > 0:
+                # Create financial dataframe
+                self.financial_df = pd.DataFrame(financial_data)
+                self.financial_df.index.name = 'date'
+                self.financial_df = self.financial_df.reset_index()
+                
+                # Ensure date column is datetime
+                self.financial_df['date'] = pd.to_datetime(self.financial_df['date']).dt.tz_localize(None).dt.normalize()
+                
+                # Remove weekends if configured
+                if self.config['FILTER_WEEKENDS']:
+                    self.financial_df = self.financial_df[
+                        self.financial_df['date'].dt.weekday < 5
+                    ]
+                
+                # Remove holidays if configured
+                if self.config['FILTER_HOLIDAYS']:
+                    holiday_mask = self.financial_df['date'].dt.date.isin(self.us_holidays)
+                    self.financial_df = self.financial_df[~holiday_mask]
+                
+                self.has_financial_data = True
+                self.logger.info("✅ Financial data loaded successfully", {
+                    'indicators': successful_loads,
+                    'total_records': len(self.financial_df),
+                    'date_range': f"{self.financial_df['date'].min().date()} to {self.financial_df['date'].max().date()}",
+                    'indicators_loaded': list(financial_data.keys())
+                })
+                
+                return True
+            else:
+                self.logger.warning("❌ No financial indicators loaded successfully")
+                return False
+                
+        except Exception as e:
+            self.logger.error("❌ Failed to load financial data", e)
+            return False
+
+    def create_sample_data(self) -> bool:
+        """
+        Create realistic sample data for demonstration when real data is unavailable
+        """
+        self.logger.info("🔧 Creating sample data for demonstration...")
         
-        # Remove low volume days
-        min_volume = self.config['MIN_MAIL_VOLUME']
-        self.mail_df = self.mail_df[self.mail_df['volume'] >= min_volume]
-        
-        # Create mail type summaries
-        if 'type' in self.mail_df.columns:
+        try:
+            # Generate date range (business days only)
+            start_date = pd.to_datetime(self.config['DATA_START_DATE'])
+            end_date = datetime.now()
+            business_days = pd.bdate_range(start=start_date, end=end_date, freq='B')
+            
+            np.random.seed(42)  # For reproducible results
+            
+            # Sample call volume data
+            call_volumes = []
+            for date in business_days:
+                # Simulate realistic call patterns with some seasonality
+                base_volume = 150 + np.sin(len(call_volumes) / 30) * 30  # Monthly cycle
+                daily_volume = max(int(base_volume + np.random.normal(0, 25)), 10)
+                call_volumes.append(daily_volume)
+            
+            self.call_volume_df = pd.DataFrame({
+                'date': business_days,
+                'call_volume': call_volumes
+            })
+            self.has_call_volume_data = True
+            
+            # Sample call intent data
+            intents = ['billing_inquiry', 'account_update', 'statement_question', 'balance_check', 'general_support']
+            intent_data = []
+            
+            for i, date in enumerate(business_days):
+                daily_total = call_volumes[i]
+                for intent in intents:
+                    intent_count = max(int(daily_total * np.random.uniform(0.1, 0.3)), 1)
+                    intent_data.extend([{'date': date, 'intent': intent}] * intent_count)
+            
+            self.call_intent_df = pd.DataFrame(intent_data)
+            self.calls_by_intent = (self.call_intent_df
+                                    .groupby('intent')
+                                    .size()
+                                    .reset_index(name='count')
+                                    .sort_values('count', ascending=False))
+            self.has_call_intent_data = True
+            
+            # Sample mail data
+            mail_data = []
+            mail_types = ['statement', 'billing', 'notification', 'reminder', 'confirmation']
+            
+            for i, date in enumerate(business_days):
+                base_mail = 2000 + np.sin(i / 20) * 500  # Some seasonality
+                daily_mail = max(int(base_mail + np.random.normal(0, 300)), 100)
+                
+                for mail_type in mail_types:
+                    type_volume = max(int(daily_mail * np.random.uniform(0.1, 0.3)), 5)
+                    mail_data.append({
+                        'date': date,
+                        'type': mail_type,
+                        'volume': type_volume
+                    })
+            
+            self.mail_df = pd.DataFrame(mail_data)
             self.mail_by_type = (self.mail_df
                                 .groupby('type')['volume']
                                 .sum()
                                 .reset_index()
                                 .sort_values('volume', ascending=False))
-        else:
-            self.mail_by_type = pd.DataFrame({'type': ['Unknown'], 'volume': [self.mail_df['volume'].sum()]})
-        
-        # Final validation
-        if len(self.mail_df) < self.config['MIN_SAMPLE_SIZE']:
-            self.logger.warning(f"Insufficient mail data: {len(self.mail_df)} records")
-            return False
-        
-        self.has_mail_data = True
-        self.logger.info("✅ Mail data loaded successfully", {
-            'total_records': len(self.mail_df),
-            'unique_types': len(self.mail_by_type),
-            'date_range': f"{self.mail_df['date'].min().date()} to {self.mail_df['date'].max().date()}",
-            'total_volume': f"{self.mail_df['volume'].sum():,.0f}",
-            'avg_daily_volume': f"{self.mail_df['volume'].mean():.1f}",
-            'filtered_out': original_len - len(self.mail_df)
-        })
-        
-        return True
-        
-    except Exception as e:
-        self.logger.error("❌ Failed to load mail data", e)
-        return False
-
-def load_financial_data(self) -> bool:
-    """
-    Load financial indicator data for market correlation analysis
-    """
-    if not FINANCIAL_AVAILABLE:
-        self.logger.info("📊 Financial data loading skipped - yfinance not available")
-        return False
-    
-    self.logger.info("🔄 Loading financial indicator data...")
-    
-    try:
-        # Determine date range from existing data
-        if self.has_call_volume_data:
-            start_date = self.call_volume_df['date'].min() - timedelta(days=5)
-            end_date = self.call_volume_df['date'].max() + timedelta(days=1)
-        elif self.has_mail_data:
-            start_date = self.mail_df['date'].min() - timedelta(days=5)
-            end_date = self.mail_df['date'].max() + timedelta(days=1)
-        else:
-            start_date = pd.to_datetime(self.config['DATA_START_DATE'])
-            end_date = datetime.now()
-        
-        self.logger.info(f"Loading financial data from {start_date.date()} to {end_date.date()}")
-        
-        financial_data = {}
-        successful_loads = 0
-        
-        for name, ticker in self.config['FINANCIAL_INDICATORS'].items():
-            try:
-                self.logger.info(f"Fetching {name} ({ticker})...")
-                
-                ticker_obj = yf.Ticker(ticker)
-                data = ticker_obj.history(
-                    start=start_date, 
-                    end=end_date,
-                    interval='1d',
-                    auto_adjust=True,
-                    prepost=False
-                )
-                
-                if not data.empty and 'Close' in data.columns:
-                    # Resample to daily and forward fill
-                    close_prices = data['Close'].resample('D').last().ffill()
-                    
-                    if len(close_prices) > 10:  # Minimum data points
-                        # Calculate percentage change from first value (normalized)
-                        first_price = close_prices.iloc[0]
-                        if first_price > 0:
-                            pct_change = ((close_prices - first_price) / first_price * 100)
-                            financial_data[name] = pct_change
-                            successful_loads += 1
-                            self.logger.info(f"✅ {name}: {len(close_prices)} data points loaded")
-                        else:
-                            self.logger.warning(f"Invalid first price for {name}: {first_price}")
-                else:
-                    self.logger.warning(f"No valid data for {name}")
-                    
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch {name}: {e}")
-                continue
-        
-        if successful_loads > 0:
-            # Create financial dataframe
-            self.financial_df = pd.DataFrame(financial_data)
-            self.financial_df.index.name = 'date'
-            self.financial_df = self.financial_df.reset_index()
+            self.has_mail_data = True
             
-            # Ensure date column is datetime
-            self.financial_df['date'] = pd.to_datetime(self.financial_df['date']).dt.tz_localize(None).dt.normalize()
-            
-            # Remove weekends if configured
-            if self.config['FILTER_WEEKENDS']:
-                self.financial_df = self.financial_df[
-                    self.financial_df['date'].dt.weekday < 5
-                ]
-            
-            # Remove holidays if configured
-            if self.config['FILTER_HOLIDAYS']:
-                holiday_mask = self.financial_df['date'].dt.date.isin(self.us_holidays)
-                self.financial_df = self.financial_df[~holiday_mask]
-            
-            self.has_financial_data = True
-            self.logger.info("✅ Financial data loaded successfully", {
-                'indicators': successful_loads,
-                'total_records': len(self.financial_df),
-                'date_range': f"{self.financial_df['date'].min().date()} to {self.financial_df['date'].max().date()}",
-                'indicators_loaded': list(financial_data.keys())
-            })
-            
-            return True
-        else:
-            self.logger.warning("❌ No financial indicators loaded successfully")
-            return False
-            
-    except Exception as e:
-        self.logger.error("❌ Failed to load financial data", e)
-        return False
-
-def create_sample_data(self) -> bool:
-    """
-    Create realistic sample data for demonstration when real data is unavailable
-    """
-    self.logger.info("🔧 Creating sample data for demonstration...")
-    
-    try:
-        # Generate date range (business days only)
-        start_date = pd.to_datetime(self.config['DATA_START_DATE'])
-        end_date = datetime.now()
-        business_days = pd.bdate_range(start=start_date, end=end_date, freq='B')
-        
-        np.random.seed(42)  # For reproducible results
-        
-        # Sample call volume data
-        call_volumes = []
-        for date in business_days:
-            # Simulate realistic call patterns with some seasonality
-            base_volume = 150 + np.sin(len(call_volumes) / 30) * 30  # Monthly cycle
-            daily_volume = max(int(base_volume + np.random.normal(0, 25)), 10)
-            call_volumes.append(daily_volume)
-        
-        self.call_volume_df = pd.DataFrame({
-            'date': business_days,
-            'call_volume': call_volumes
-        })
-        self.has_call_volume_data = True
-        
-        # Sample call intent data
-        intents = ['billing_inquiry', 'account_update', 'statement_question', 'balance_check', 'general_support']
-        intent_data = []
-        
-        for i, date in enumerate(business_days):
-            daily_total = call_volumes[i]
-            for intent in intents:
-                intent_count = max(int(daily_total * np.random.uniform(0.1, 0.3)), 1)
-                intent_data.extend([{'date': date, 'intent': intent}] * intent_count)
-        
-        self.call_intent_df = pd.DataFrame(intent_data)
-        self.calls_by_intent = (self.call_intent_df
-                                .groupby('intent')
-                                .size()
-                                .reset_index(name='count')
-                                .sort_values('count', ascending=False))
-        self.has_call_intent_data = True
-        
-        # Sample mail data
-        mail_data = []
-        mail_types = ['statement', 'billing', 'notification', 'reminder', 'confirmation']
-        
-        for i, date in enumerate(business_days):
-            base_mail = 2000 + np.sin(i / 20) * 500  # Some seasonality
-            daily_mail = max(int(base_mail + np.random.normal(0, 300)), 100)
-            
-            for mail_type in mail_types:
-                type_volume = max(int(daily_mail * np.random.uniform(0.1, 0.3)), 5)
-                mail_data.append({
-                    'date': date,
-                    'type': mail_type,
-                    'volume': type_volume
-                })
-        
-        self.mail_df = pd.DataFrame(mail_data)
-        self.mail_by_type = (self.mail_df
-                            .groupby('type')['volume']
-                            .sum()
-                            .reset_index()
-                            .sort_values('volume', ascending=False))
-        self.has_mail_data = True
-        
-        self.logger.info("✅ Sample data created successfully", {
-            'business_days': len(business_days),
-            'call_records': len(self.call_volume_df),
-            'intent_records': len(self.call_intent_df),
-            'mail_records': len(self.mail_df),
-            'unique_intents': len(self.calls_by_intent),
-            'unique_mail_types': len(self.mail_by_type)
-        })
-        
-        return True
-        
-    except Exception as e:
-        self.logger.error("❌ Failed to create sample data", e)
-        return False
-def combine_and_process_data(self) -> bool:
-        """
-        Combine all data sources and create analysis-ready dataset
-        """
-        self.logger.info("🔄 Combining and processing data...")
-        
-        try:
-            # Start with call volume data as primary source
-            if not self.has_call_volume_data:
-                self.logger.error("❌ No call volume data available for combination")
-                return False
-            
-            # Use call volume as base
-            combined = self.call_volume_df.copy()
-            
-            # Add mail data (inner join to only keep dates with both call and mail data)
-            if self.has_mail_data:
-                # Aggregate mail data by date
-                daily_mail = (self.mail_df
-                             .groupby('date')['volume']
-                             .sum()
-                             .reset_index()
-                             .rename(columns={'volume': 'mail_volume'}))
-                
-                if self.config['USE_INNER_JOIN']:
-                    combined = pd.merge(combined, daily_mail, on='date', how='inner')
-                    self.logger.info(f"Inner join result: {len(combined)} records with both call and mail data")
-                else:
-                    combined = pd.merge(combined, daily_mail, on='date', how='left')
-                    combined['mail_volume'] = combined['mail_volume'].fillna(0)
-                    self.logger.info(f"Left join result: {len(combined)} records")
-            else:
-                combined['mail_volume'] = 0
-                self.logger.warning("No mail data available, using zero mail volume")
-            
-            # Add financial data
-            if self.has_financial_data:
-                combined = pd.merge(combined, self.financial_df, on='date', how='left')
-                
-                # Forward fill financial data for missing dates
-                financial_cols = [col for col in self.financial_df.columns if col != 'date']
-                for col in financial_cols:
-                    if col in combined.columns:
-                        combined[col] = combined[col].fillna(method='ffill').fillna(method='bfill')
-                        # Apply z-score normalization for financial data
-                        if combined[col].std() > 0:
-                            combined[f'{col}_normalized'] = zscore(combined[col], nan_policy='omit')
-                        else:
-                            combined[f'{col}_normalized'] = 0
-                
-                self.logger.info(f"Added {len(financial_cols)} financial indicators")
-            
-            # Calculate momentum and acceleration features
-            for window in self.config['MOMENTUM_WINDOWS']:
-                # Mail momentum (percentage change)
-                combined[f'mail_momentum_{window}d'] = combined['mail_volume'].pct_change(periods=window) * 100
-                combined[f'mail_momentum_{window}d'] = combined[f'mail_momentum_{window}d'].fillna(0)
-                
-                # Mail acceleration (change in momentum)
-                combined[f'mail_acceleration_{window}d'] = combined[f'mail_momentum_{window}d'].diff()
-                combined[f'mail_acceleration_{window}d'] = combined[f'mail_acceleration_{window}d'].fillna(0)
-                
-                # Rolling statistics
-                combined[f'mail_rolling_mean_{window}d'] = combined['mail_volume'].rolling(window=window).mean()
-                combined[f'mail_rolling_std_{window}d'] = combined['mail_volume'].rolling(window=window).std()
-                combined[f'call_rolling_mean_{window}d'] = combined['call_volume'].rolling(window=window).mean()
-                combined[f'call_rolling_std_{window}d'] = combined['call_volume'].rolling(window=window).std()
-            
-            # Add temporal features
-            combined['weekday'] = combined['date'].dt.day_name()
-            combined['day_of_week'] = combined['date'].dt.weekday
-            combined['month'] = combined['date'].dt.month
-            combined['quarter'] = combined['date'].dt.quarter
-            combined['is_month_end'] = combined['date'].dt.is_month_end
-            combined['is_quarter_end'] = combined['date'].dt.is_quarter_end
-            
-            # Create normalized versions of key metrics
-            for col in ['call_volume', 'mail_volume']:
-                if combined[col].std() > 0:
-                    combined[f'{col}_normalized'] = zscore(combined[col], nan_policy='omit')
-                else:
-                    combined[f'{col}_normalized'] = 0
-            
-            # Calculate efficiency metrics
-            combined['calls_per_1k_mails'] = np.where(
-                combined['mail_volume'] > 0,
-                (combined['call_volume'] / combined['mail_volume']) * 1000,
-                0
-            )
-            
-            # Remove outliers using robust method
-            for col in ['call_volume', 'mail_volume']:
-                if col in combined.columns:
-                    q1 = combined[col].quantile(0.25)
-                    q3 = combined[col].quantile(0.75)
-                    iqr = q3 - q1
-                    lower_bound = q1 - 1.5 * iqr
-                    upper_bound = q3 + 1.5 * iqr
-                    
-                    outliers = (combined[col] < lower_bound) | (combined[col] > upper_bound)
-                    outlier_count = outliers.sum()
-                    
-                    if outlier_count > 0:
-                        combined = combined[~outliers]
-                        self.data_quality_metrics['outliers_removed'] += outlier_count
-                        self.logger.info(f"Removed {outlier_count} outliers from {col}")
-            
-            # Sort by date and reset index
-            combined = combined.sort_values('date').reset_index(drop=True)
-            
-            # Final validation
-            if len(combined) < self.config['MIN_SAMPLE_SIZE']:
-                self.logger.error(f"Insufficient combined data: {len(combined)} records")
-                return False
-            
-            self.combined_df = combined
-            self.data_quality_metrics['records_after_filtering'] = len(combined)
-            
-            self.logger.info("✅ Data combination completed successfully", {
-                'final_records': len(combined),
-                'date_range': f"{combined['date'].min().date()} to {combined['date'].max().date()}",
-                'features_created': len([col for col in combined.columns if any(x in col for x in ['momentum', 'acceleration', 'rolling'])]),
-                'data_quality': self.data_quality_metrics
+            self.logger.info("✅ Sample data created successfully", {
+                'business_days': len(business_days),
+                'call_records': len(self.call_volume_df),
+                'intent_records': len(self.call_intent_df),
+                'mail_records': len(self.mail_df),
+                'unique_intents': len(self.calls_by_intent),
+                'unique_mail_types': len(self.mail_by_type)
             })
             
             return True
             
         except Exception as e:
-            self.logger.error("❌ Data combination failed", e)
+            self.logger.error("❌ Failed to create sample data", e)
             return False
-    
-def analyze_enhanced_correlations(self) -> bool:
-    """
-    Perform comprehensive correlation analysis with enhanced features
-    """
-    if not SCIPY_AVAILABLE or self.combined_df.empty:
-        self.logger.warning("Enhanced correlation analysis skipped - missing dependencies or data")
-        return False
-    
-    self.logger.info("🔄 Analyzing enhanced correlations...")
-    
-    try:
-        df = self.combined_df
-        max_lag = self.config['MAX_LAG_DAYS']
-        all_correlations = []
+    def combine_and_process_data(self) -> bool:
+            """
+            Combine all data sources and create analysis-ready dataset
+            """
+            self.logger.info("🔄 Combining and processing data...")
+            
+            try:
+                # Start with call volume data as primary source
+                if not self.has_call_volume_data:
+                    self.logger.error("❌ No call volume data available for combination")
+                    return False
+                
+                # Use call volume as base
+                combined = self.call_volume_df.copy()
+                
+                # Add mail data (inner join to only keep dates with both call and mail data)
+                if self.has_mail_data:
+                    # Aggregate mail data by date
+                    daily_mail = (self.mail_df
+                                .groupby('date')['volume']
+                                .sum()
+                                .reset_index()
+                                .rename(columns={'volume': 'mail_volume'}))
+                    
+                    if self.config['USE_INNER_JOIN']:
+                        combined = pd.merge(combined, daily_mail, on='date', how='inner')
+                        self.logger.info(f"Inner join result: {len(combined)} records with both call and mail data")
+                    else:
+                        combined = pd.merge(combined, daily_mail, on='date', how='left')
+                        combined['mail_volume'] = combined['mail_volume'].fillna(0)
+                        self.logger.info(f"Left join result: {len(combined)} records")
+                else:
+                    combined['mail_volume'] = 0
+                    self.logger.warning("No mail data available, using zero mail volume")
+                
+                # Add financial data
+                if self.has_financial_data:
+                    combined = pd.merge(combined, self.financial_df, on='date', how='left')
+                    
+                    # Forward fill financial data for missing dates
+                    financial_cols = [col for col in self.financial_df.columns if col != 'date']
+                    for col in financial_cols:
+                        if col in combined.columns:
+                            combined[col] = combined[col].fillna(method='ffill').fillna(method='bfill')
+                            # Apply z-score normalization for financial data
+                            if combined[col].std() > 0:
+                                combined[f'{col}_normalized'] = zscore(combined[col], nan_policy='omit')
+                            else:
+                                combined[f'{col}_normalized'] = 0
+                    
+                    self.logger.info(f"Added {len(financial_cols)} financial indicators")
+                
+                # Calculate momentum and acceleration features
+                for window in self.config['MOMENTUM_WINDOWS']:
+                    # Mail momentum (percentage change)
+                    combined[f'mail_momentum_{window}d'] = combined['mail_volume'].pct_change(periods=window) * 100
+                    combined[f'mail_momentum_{window}d'] = combined[f'mail_momentum_{window}d'].fillna(0)
+                    
+                    # Mail acceleration (change in momentum)
+                    combined[f'mail_acceleration_{window}d'] = combined[f'mail_momentum_{window}d'].diff()
+                    combined[f'mail_acceleration_{window}d'] = combined[f'mail_acceleration_{window}d'].fillna(0)
+                    
+                    # Rolling statistics
+                    combined[f'mail_rolling_mean_{window}d'] = combined['mail_volume'].rolling(window=window).mean()
+                    combined[f'mail_rolling_std_{window}d'] = combined['mail_volume'].rolling(window=window).std()
+                    combined[f'call_rolling_mean_{window}d'] = combined['call_volume'].rolling(window=window).mean()
+                    combined[f'call_rolling_std_{window}d'] = combined['call_volume'].rolling(window=window).std()
+                
+                # Add temporal features
+                combined['weekday'] = combined['date'].dt.day_name()
+                combined['day_of_week'] = combined['date'].dt.weekday
+                combined['month'] = combined['date'].dt.month
+                combined['quarter'] = combined['date'].dt.quarter
+                combined['is_month_end'] = combined['date'].dt.is_month_end
+                combined['is_quarter_end'] = combined['date'].dt.is_quarter_end
+                
+                # Create normalized versions of key metrics
+                for col in ['call_volume', 'mail_volume']:
+                    if combined[col].std() > 0:
+                        combined[f'{col}_normalized'] = zscore(combined[col], nan_policy='omit')
+                    else:
+                        combined[f'{col}_normalized'] = 0
+                
+                # Calculate efficiency metrics
+                combined['calls_per_1k_mails'] = np.where(
+                    combined['mail_volume'] > 0,
+                    (combined['call_volume'] / combined['mail_volume']) * 1000,
+                    0
+                )
+                
+                # Remove outliers using robust method
+                for col in ['call_volume', 'mail_volume']:
+                    if col in combined.columns:
+                        q1 = combined[col].quantile(0.25)
+                        q3 = combined[col].quantile(0.75)
+                        iqr = q3 - q1
+                        lower_bound = q1 - 1.5 * iqr
+                        upper_bound = q3 + 1.5 * iqr
+                        
+                        outliers = (combined[col] < lower_bound) | (combined[col] > upper_bound)
+                        outlier_count = outliers.sum()
+                        
+                        if outlier_count > 0:
+                            combined = combined[~outliers]
+                            self.data_quality_metrics['outliers_removed'] += outlier_count
+                            self.logger.info(f"Removed {outlier_count} outliers from {col}")
+                
+                # Sort by date and reset index
+                combined = combined.sort_values('date').reset_index(drop=True)
+                
+                # Final validation
+                if len(combined) < self.config['MIN_SAMPLE_SIZE']:
+                    self.logger.error(f"Insufficient combined data: {len(combined)} records")
+                    return False
+                
+                self.combined_df = combined
+                self.data_quality_metrics['records_after_filtering'] = len(combined)
+                
+                self.logger.info("✅ Data combination completed successfully", {
+                    'final_records': len(combined),
+                    'date_range': f"{combined['date'].min().date()} to {combined['date'].max().date()}",
+                    'features_created': len([col for col in combined.columns if any(x in col for x in ['momentum', 'acceleration', 'rolling'])]),
+                    'data_quality': self.data_quality_metrics
+                })
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error("❌ Data combination failed", e)
+                return False
         
-        # Test different feature types
-        feature_categories = {
-            'raw_volume': ['mail_volume'],
-            'momentum': [col for col in df.columns if 'momentum' in col and 'mail' in col],
-            'acceleration': [col for col in df.columns if 'acceleration' in col and 'mail' in col],
-            'rolling_mean': [col for col in df.columns if 'rolling_mean' in col and 'mail' in col],
-            'normalized': [col for col in df.columns if 'normalized' in col and 'mail' in col]
-        }
+    def analyze_enhanced_correlations(self) -> bool:
+        """
+        Perform comprehensive correlation analysis with enhanced features
+        """
+        if not SCIPY_AVAILABLE or self.combined_df.empty:
+            self.logger.warning("Enhanced correlation analysis skipped - missing dependencies or data")
+            return False
         
-        for category, features in feature_categories.items():
-            for feature in features:
-                if feature not in df.columns:
-                    continue
+        self.logger.info("🔄 Analyzing enhanced correlations...")
+        
+        try:
+            df = self.combined_df
+            max_lag = self.config['MAX_LAG_DAYS']
+            all_correlations = []
+            
+            # Test different feature types
+            feature_categories = {
+                'raw_volume': ['mail_volume'],
+                'momentum': [col for col in df.columns if 'momentum' in col and 'mail' in col],
+                'acceleration': [col for col in df.columns if 'acceleration' in col and 'mail' in col],
+                'rolling_mean': [col for col in df.columns if 'rolling_mean' in col and 'mail' in col],
+                'normalized': [col for col in df.columns if 'normalized' in col and 'mail' in col]
+            }
+            
+            for category, features in feature_categories.items():
+                for feature in features:
+                    if feature not in df.columns:
+                        continue
+                    
+                    # Clean feature data
+                    feature_data = df[feature].replace([np.inf, -np.inf], np.nan).dropna()
+                    
+                    if len(feature_data) < self.config['MIN_SAMPLE_SIZE']:
+                        continue
+                    
+                    # Test different lag periods
+                    for lag in range(0, max_lag + 1, 2):  # Test every 2 days
+                        try:
+                            if lag == 0:
+                                x_data = df[feature]
+                                y_data = df['call_volume']
+                            else:
+                                x_data = df[feature]
+                                y_data = df['call_volume'].shift(-lag)
+                            
+                            # Create valid dataset
+                            valid_df = pd.DataFrame({
+                                'x': x_data,
+                                'y': y_data
+                            }).replace([np.inf, -np.inf], np.nan).dropna()
+                            
+                            if len(valid_df) >= self.config['MIN_SAMPLE_SIZE']:
+                                # Calculate Pearson correlation
+                                corr, p_val = pearsonr(valid_df['x'], valid_df['y'])
+                                
+                                if np.isfinite(corr):
+                                    all_correlations.append({
+                                        'feature': feature,
+                                        'category': category,
+                                        'lag_days': lag,
+                                        'correlation': corr,
+                                        'p_value': p_val,
+                                        'significant': p_val < self.config['SIGNIFICANCE_LEVEL'],
+                                        'sample_size': len(valid_df),
+                                        'abs_correlation': abs(corr)
+                                    })
+                                    
+                                    # Log significant findings
+                                    if abs(corr) > self.config['MIN_CORRELATION_THRESHOLD'] and p_val < self.config['SIGNIFICANCE_LEVEL']:
+                                        self.logger.info(f"Significant correlation found: {feature} lag {lag}d = {corr:.3f} (p={p_val:.3f})")
+                        
+                        except Exception as e:
+                            self.logger.debug(f"Correlation calculation failed for {feature} lag {lag}: {e}")
+                            continue
+            
+            # Store results
+            if all_correlations:
+                self.momentum_correlation_results = pd.DataFrame(all_correlations)
+                self.momentum_correlation_results = self.momentum_correlation_results.sort_values(
+                    'abs_correlation', ascending=False
+                )
                 
-                # Clean feature data
-                feature_data = df[feature].replace([np.inf, -np.inf], np.nan).dropna()
+                # Create data table for display (top correlations)
+                self.correlation_data_table = self.momentum_correlation_results.head(20).copy()
                 
-                if len(feature_data) < self.config['MIN_SAMPLE_SIZE']:
-                    continue
+                self.logger.info("✅ Enhanced correlation analysis completed", {
+                    'total_correlations': len(all_correlations),
+                    'significant_correlations': len(self.momentum_correlation_results[
+                        self.momentum_correlation_results['significant']
+                    ]),
+                    'best_correlation': self.momentum_correlation_results.iloc[0]['correlation'],
+                    'best_feature': self.momentum_correlation_results.iloc[0]['feature']
+                })
                 
-                # Test different lag periods
+                return True
+            else:
+                self.logger.warning("No valid correlations found")
+                return False
+                
+        except Exception as e:
+            self.logger.error("❌ Enhanced correlation analysis failed", e)
+            return False
+
+    def analyze_rolling_correlation(self) -> bool:
+        """
+        Analyze rolling correlation patterns over time
+        """
+        if not SCIPY_AVAILABLE or self.combined_df.empty:
+            self.logger.warning("Rolling correlation analysis skipped")
+            return False
+        
+        self.logger.info("🔄 Analyzing rolling correlation patterns...")
+        
+        try:
+            df = self.combined_df
+            window_size = self.config['ROLLING_WINDOW_SIZE']
+            
+            if len(df) < window_size + 10:
+                self.logger.warning(f"Insufficient data for rolling correlation: need {window_size + 10}, have {len(df)}")
+                return False
+            
+            rolling_results = []
+            
+            # Test different lag periods
+            test_lags = [0, 1, 3, 5, 7, 14]
+            
+            for lag in test_lags:
+                correlations = []
+                dates = []
+                
+                for i in range(window_size, len(df) - max(lag, 1)):
+                    window_data = df.iloc[i-window_size:i].copy()
+                    
+                    if len(window_data) >= 20:  # Minimum window size
+                        try:
+                            if lag == 0:
+                                x_data = window_data['mail_volume']
+                                y_data = window_data['call_volume']
+                            else:
+                                # Use mail data to predict future calls
+                                future_data = df.iloc[i-window_size+lag:i+lag].copy()
+                                if len(future_data) >= 20:
+                                    x_data = window_data['mail_volume']
+                                    y_data = future_data['call_volume']
+                                else:
+                                    correlations.append(0)
+                                    dates.append(df.iloc[i]['date'])
+                                    continue
+                            
+                            # Calculate correlation
+                            valid_data = pd.DataFrame({
+                                'x': x_data,
+                                'y': y_data
+                            }).dropna()
+                            
+                            if len(valid_data) >= 15 and valid_data['x'].std() > 0 and valid_data['y'].std() > 0:
+                                corr, _ = pearsonr(valid_data['x'], valid_data['y'])
+                                correlations.append(corr if np.isfinite(corr) else 0)
+                            else:
+                                correlations.append(0)
+                                
+                            dates.append(df.iloc[i]['date'])
+                            
+                        except Exception as e:
+                            correlations.append(0)
+                            dates.append(df.iloc[i]['date'])
+                            continue
+                
+                # Store results for this lag
+                for date, corr in zip(dates, correlations):
+                    rolling_results.append({
+                        'date': date,
+                        'lag_days': lag,
+                        'correlation': corr,
+                        'window_size': window_size
+                    })
+            
+            if rolling_results:
+                self.rolling_correlation_results = pd.DataFrame(rolling_results)
+                
+                # Calculate summary statistics
+                summary_stats = {}
+                for lag in test_lags:
+                    lag_data = self.rolling_correlation_results[
+                        self.rolling_correlation_results['lag_days'] == lag
+                    ]
+                    if not lag_data.empty:
+                        summary_stats[f'lag_{lag}d'] = {
+                            'mean': lag_data['correlation'].mean(),
+                            'std': lag_data['correlation'].std(),
+                            'max': lag_data['correlation'].max(),
+                            'min': lag_data['correlation'].min()
+                        }
+                
+                self.logger.info("✅ Rolling correlation analysis completed", {
+                    'total_windows': len(rolling_results),
+                    'lags_tested': len(test_lags),
+                    'window_size': window_size,
+                    'summary_stats': summary_stats
+                })
+                
+                return True
+            else:
+                self.logger.warning("No rolling correlation results generated")
+                return False
+                
+        except Exception as e:
+            self.logger.error("❌ Rolling correlation analysis failed", e)
+            return False
+
+    def analyze_intent_correlation(self) -> bool:
+        """
+        Analyze correlation between mail volume and call intents across different lags
+        """
+        if not self.has_call_intent_data or not SCIPY_AVAILABLE or self.combined_df.empty:
+            self.logger.warning("Intent correlation analysis skipped - missing data or dependencies")
+            return False
+        
+        self.logger.info("🔄 Analyzing intent-level correlations...")
+        
+        try:
+            # Create daily intent counts
+            daily_intents = (self.call_intent_df
+                            .groupby(['date', 'intent'])
+                            .size()
+                            .reset_index(name='count'))
+            
+            # Pivot to get intent columns
+            intent_pivot = daily_intents.pivot(index='date', columns='intent', values='count').fillna(0)
+            
+            if intent_pivot.empty:
+                self.logger.warning("No intent data available for correlation analysis")
+                return False
+            
+            # Get mail volume data aligned with intent dates
+            mail_data = self.combined_df[['date', 'mail_volume']].copy()
+            
+            # Merge with intent data
+            intent_mail_data = pd.merge(
+                intent_pivot.reset_index(),
+                mail_data,
+                on='date',
+                how='inner'
+            )
+            
+            if len(intent_mail_data) < self.config['MIN_SAMPLE_SIZE']:
+                self.logger.warning("Insufficient overlapping data for intent correlation")
+                return False
+            
+            # Calculate correlation matrix across different lags
+            max_lag = self.config['MAX_LAG_DAYS']
+            correlation_matrix = []
+            
+            for intent in intent_pivot.columns:
+                intent_correlations = {'intent': intent}
+                
                 for lag in range(0, max_lag + 1, 2):  # Test every 2 days
                     try:
                         if lag == 0:
-                            x_data = df[feature]
-                            y_data = df['call_volume']
+                            intent_data = intent_mail_data[intent]
+                            mail_data_aligned = intent_mail_data['mail_volume']
                         else:
-                            x_data = df[feature]
-                            y_data = df['call_volume'].shift(-lag)
+                            # Shift intent data to test if mail predicts future calls
+                            intent_data = intent_mail_data[intent].shift(-lag)
+                            mail_data_aligned = intent_mail_data['mail_volume']
                         
                         # Create valid dataset
-                        valid_df = pd.DataFrame({
-                            'x': x_data,
-                            'y': y_data
-                        }).replace([np.inf, -np.inf], np.nan).dropna()
-                        
-                        if len(valid_df) >= self.config['MIN_SAMPLE_SIZE']:
-                            # Calculate Pearson correlation
-                            corr, p_val = pearsonr(valid_df['x'], valid_df['y'])
-                            
-                            if np.isfinite(corr):
-                                all_correlations.append({
-                                    'feature': feature,
-                                    'category': category,
-                                    'lag_days': lag,
-                                    'correlation': corr,
-                                    'p_value': p_val,
-                                    'significant': p_val < self.config['SIGNIFICANCE_LEVEL'],
-                                    'sample_size': len(valid_df),
-                                    'abs_correlation': abs(corr)
-                                })
-                                
-                                # Log significant findings
-                                if abs(corr) > self.config['MIN_CORRELATION_THRESHOLD'] and p_val < self.config['SIGNIFICANCE_LEVEL']:
-                                    self.logger.info(f"Significant correlation found: {feature} lag {lag}d = {corr:.3f} (p={p_val:.3f})")
-                    
-                    except Exception as e:
-                        self.logger.debug(f"Correlation calculation failed for {feature} lag {lag}: {e}")
-                        continue
-        
-        # Store results
-        if all_correlations:
-            self.momentum_correlation_results = pd.DataFrame(all_correlations)
-            self.momentum_correlation_results = self.momentum_correlation_results.sort_values(
-                'abs_correlation', ascending=False
-            )
-            
-            # Create data table for display (top correlations)
-            self.correlation_data_table = self.momentum_correlation_results.head(20).copy()
-            
-            self.logger.info("✅ Enhanced correlation analysis completed", {
-                'total_correlations': len(all_correlations),
-                'significant_correlations': len(self.momentum_correlation_results[
-                    self.momentum_correlation_results['significant']
-                ]),
-                'best_correlation': self.momentum_correlation_results.iloc[0]['correlation'],
-                'best_feature': self.momentum_correlation_results.iloc[0]['feature']
-            })
-            
-            return True
-        else:
-            self.logger.warning("No valid correlations found")
-            return False
-            
-    except Exception as e:
-        self.logger.error("❌ Enhanced correlation analysis failed", e)
-        return False
-
-def analyze_rolling_correlation(self) -> bool:
-    """
-    Analyze rolling correlation patterns over time
-    """
-    if not SCIPY_AVAILABLE or self.combined_df.empty:
-        self.logger.warning("Rolling correlation analysis skipped")
-        return False
-    
-    self.logger.info("🔄 Analyzing rolling correlation patterns...")
-    
-    try:
-        df = self.combined_df
-        window_size = self.config['ROLLING_WINDOW_SIZE']
-        
-        if len(df) < window_size + 10:
-            self.logger.warning(f"Insufficient data for rolling correlation: need {window_size + 10}, have {len(df)}")
-            return False
-        
-        rolling_results = []
-        
-        # Test different lag periods
-        test_lags = [0, 1, 3, 5, 7, 14]
-        
-        for lag in test_lags:
-            correlations = []
-            dates = []
-            
-            for i in range(window_size, len(df) - max(lag, 1)):
-                window_data = df.iloc[i-window_size:i].copy()
-                
-                if len(window_data) >= 20:  # Minimum window size
-                    try:
-                        if lag == 0:
-                            x_data = window_data['mail_volume']
-                            y_data = window_data['call_volume']
-                        else:
-                            # Use mail data to predict future calls
-                            future_data = df.iloc[i-window_size+lag:i+lag].copy()
-                            if len(future_data) >= 20:
-                                x_data = window_data['mail_volume']
-                                y_data = future_data['call_volume']
-                            else:
-                                correlations.append(0)
-                                dates.append(df.iloc[i]['date'])
-                                continue
-                        
-                        # Calculate correlation
                         valid_data = pd.DataFrame({
-                            'x': x_data,
-                            'y': y_data
+                            'intent': intent_data,
+                            'mail': mail_data_aligned
                         }).dropna()
                         
-                        if len(valid_data) >= 15 and valid_data['x'].std() > 0 and valid_data['y'].std() > 0:
-                            corr, _ = pearsonr(valid_data['x'], valid_data['y'])
-                            correlations.append(corr if np.isfinite(corr) else 0)
-                        else:
-                            correlations.append(0)
+                        if (len(valid_data) >= 15 and 
+                            valid_data['mail'].std() > 0 and 
+                            valid_data['intent'].std() > 0):
                             
-                        dates.append(df.iloc[i]['date'])
-                        
-                    except Exception as e:
-                        correlations.append(0)
-                        dates.append(df.iloc[i]['date'])
-                        continue
-            
-            # Store results for this lag
-            for date, corr in zip(dates, correlations):
-                rolling_results.append({
-                    'date': date,
-                    'lag_days': lag,
-                    'correlation': corr,
-                    'window_size': window_size
-                })
-        
-        if rolling_results:
-            self.rolling_correlation_results = pd.DataFrame(rolling_results)
-            
-            # Calculate summary statistics
-            summary_stats = {}
-            for lag in test_lags:
-                lag_data = self.rolling_correlation_results[
-                    self.rolling_correlation_results['lag_days'] == lag
-                ]
-                if not lag_data.empty:
-                    summary_stats[f'lag_{lag}d'] = {
-                        'mean': lag_data['correlation'].mean(),
-                        'std': lag_data['correlation'].std(),
-                        'max': lag_data['correlation'].max(),
-                        'min': lag_data['correlation'].min()
-                    }
-            
-            self.logger.info("✅ Rolling correlation analysis completed", {
-                'total_windows': len(rolling_results),
-                'lags_tested': len(test_lags),
-                'window_size': window_size,
-                'summary_stats': summary_stats
-            })
-            
-            return True
-        else:
-            self.logger.warning("No rolling correlation results generated")
-            return False
-            
-    except Exception as e:
-        self.logger.error("❌ Rolling correlation analysis failed", e)
-        return False
-
-def analyze_intent_correlation(self) -> bool:
-    """
-    Analyze correlation between mail volume and call intents across different lags
-    """
-    if not self.has_call_intent_data or not SCIPY_AVAILABLE or self.combined_df.empty:
-        self.logger.warning("Intent correlation analysis skipped - missing data or dependencies")
-        return False
-    
-    self.logger.info("🔄 Analyzing intent-level correlations...")
-    
-    try:
-        # Create daily intent counts
-        daily_intents = (self.call_intent_df
-                        .groupby(['date', 'intent'])
-                        .size()
-                        .reset_index(name='count'))
-        
-        # Pivot to get intent columns
-        intent_pivot = daily_intents.pivot(index='date', columns='intent', values='count').fillna(0)
-        
-        if intent_pivot.empty:
-            self.logger.warning("No intent data available for correlation analysis")
-            return False
-        
-        # Get mail volume data aligned with intent dates
-        mail_data = self.combined_df[['date', 'mail_volume']].copy()
-        
-        # Merge with intent data
-        intent_mail_data = pd.merge(
-            intent_pivot.reset_index(),
-            mail_data,
-            on='date',
-            how='inner'
-        )
-        
-        if len(intent_mail_data) < self.config['MIN_SAMPLE_SIZE']:
-            self.logger.warning("Insufficient overlapping data for intent correlation")
-            return False
-        
-        # Calculate correlation matrix across different lags
-        max_lag = self.config['MAX_LAG_DAYS']
-        correlation_matrix = []
-        
-        for intent in intent_pivot.columns:
-            intent_correlations = {'intent': intent}
-            
-            for lag in range(0, max_lag + 1, 2):  # Test every 2 days
-                try:
-                    if lag == 0:
-                        intent_data = intent_mail_data[intent]
-                        mail_data_aligned = intent_mail_data['mail_volume']
-                    else:
-                        # Shift intent data to test if mail predicts future calls
-                        intent_data = intent_mail_data[intent].shift(-lag)
-                        mail_data_aligned = intent_mail_data['mail_volume']
-                    
-                    # Create valid dataset
-                    valid_data = pd.DataFrame({
-                        'intent': intent_data,
-                        'mail': mail_data_aligned
-                    }).dropna()
-                    
-                    if (len(valid_data) >= 15 and 
-                        valid_data['mail'].std() > 0 and 
-                        valid_data['intent'].std() > 0):
-                        
-                        corr, p_val = pearsonr(valid_data['mail'], valid_data['intent'])
-                        
-                        if np.isfinite(corr):
-                            intent_correlations[f'lag_{lag}'] = corr
+                            corr, p_val = pearsonr(valid_data['mail'], valid_data['intent'])
                             
-                            # Log significant correlations
-                            if abs(corr) > 0.2 and p_val < 0.05:
-                                self.logger.info(f"Strong intent correlation: {intent} lag {lag}d = {corr:.3f}")
+                            if np.isfinite(corr):
+                                intent_correlations[f'lag_{lag}'] = corr
+                                
+                                # Log significant correlations
+                                if abs(corr) > 0.2 and p_val < 0.05:
+                                    self.logger.info(f"Strong intent correlation: {intent} lag {lag}d = {corr:.3f}")
+                            else:
+                                intent_correlations[f'lag_{lag}'] = 0
                         else:
                             intent_correlations[f'lag_{lag}'] = 0
-                    else:
+                    
+                    except Exception as e:
                         intent_correlations[f'lag_{lag}'] = 0
+                        self.logger.debug(f"Intent correlation calculation failed: {e}")
                 
-                except Exception as e:
-                    intent_correlations[f'lag_{lag}'] = 0
-                    self.logger.debug(f"Intent correlation calculation failed: {e}")
+                correlation_matrix.append(intent_correlations)
             
-            correlation_matrix.append(intent_correlations)
-        
-        # Store results
-        if correlation_matrix:
-            self.intent_correlation_results = pd.DataFrame(correlation_matrix)
+            # Store results
+            if correlation_matrix:
+                self.intent_correlation_results = pd.DataFrame(correlation_matrix)
+                
+                # Calculate summary statistics
+                lag_cols = [col for col in self.intent_correlation_results.columns if col.startswith('lag_')]
+                summary_stats = {}
+                
+                for col in lag_cols:
+                    summary_stats[col] = {
+                        'mean': self.intent_correlation_results[col].mean(),
+                        'max': self.intent_correlation_results[col].max(),
+                        'min': self.intent_correlation_results[col].min(),
+                        'std': self.intent_correlation_results[col].std()
+                    }
+                
+                self.logger.info("✅ Intent correlation analysis completed", {
+                    'intents_analyzed': len(correlation_matrix),
+                    'lags_tested': len(lag_cols),
+                    'summary_stats': summary_stats
+                })
+                
+                return True
+            else:
+                self.logger.warning("No intent correlations calculated")
+                return False
+                
+        except Exception as e:
+            self.logger.error("❌ Intent correlation analysis failed", e)
+            return False
+
+    def calculate_efficiency_metrics(self) -> bool:
+        """
+        Calculate comprehensive efficiency and performance metrics
+        """
+        try:
+            if self.combined_df.empty:
+                self.logger.warning("No data available for efficiency calculations")
+                return False
             
-            # Calculate summary statistics
-            lag_cols = [col for col in self.intent_correlation_results.columns if col.startswith('lag_')]
-            summary_stats = {}
+            df = self.combined_df
             
-            for col in lag_cols:
-                summary_stats[col] = {
-                    'mean': self.intent_correlation_results[col].mean(),
-                    'max': self.intent_correlation_results[col].max(),
-                    'min': self.intent_correlation_results[col].min(),
-                    'std': self.intent_correlation_results[col].std()
-                }
+            # Basic volume metrics
+            total_calls = df['call_volume'].sum()
+            total_mail = df['mail_volume'].sum()
+            avg_daily_calls = df['call_volume'].mean()
+            avg_daily_mail = df['mail_volume'].mean()
             
-            self.logger.info("✅ Intent correlation analysis completed", {
-                'intents_analyzed': len(correlation_matrix),
-                'lags_tested': len(lag_cols),
-                'summary_stats': summary_stats
+            # Response rate
+            response_rate = (total_calls / total_mail * 100) if total_mail > 0 else 0
+            
+            # Efficiency trends
+            if len(df) >= 30:
+                recent_15 = df.tail(15)['call_volume'].mean()
+                previous_15 = df.iloc[-30:-15]['call_volume'].mean()
+                call_trend = ((recent_15 - previous_15) / previous_15 * 100) if previous_15 > 0 else 0
+                
+                recent_15_mail = df.tail(15)['mail_volume'].mean()
+                previous_15_mail = df.iloc[-30:-15]['mail_volume'].mean()
+                mail_trend = ((recent_15_mail - previous_15_mail) / previous_15_mail * 100) if previous_15_mail > 0 else 0
+            else:
+                call_trend = 0
+                mail_trend = 0
+            
+            # Volatility measures
+            call_volatility = df['call_volume'].std() / df['call_volume'].mean() * 100 if df['call_volume'].mean() > 0 else 0
+            mail_volatility = df['mail_volume'].std() / df['mail_volume'].mean() * 100 if df['mail_volume'].mean() > 0 else 0
+            
+            # Correlation-based metrics
+            best_correlation = 0
+            best_lag = 0
+            
+            if not self.momentum_correlation_results.empty:
+                best_row = self.momentum_correlation_results.iloc[0]
+                best_correlation = best_row['correlation']
+                best_lag = best_row['lag_days']
+            
+            # Efficiency ratios
+            avg_calls_per_1k_mails = df['calls_per_1k_mails'].mean() if 'calls_per_1k_mails' in df.columns else 0
+            
+            self.efficiency_metrics = {
+                'total_calls': int(total_calls),
+                'total_mail': int(total_mail),
+                'avg_daily_calls': round(avg_daily_calls, 1),
+                'avg_daily_mail': round(avg_daily_mail, 0),
+                'response_rate_pct': round(response_rate, 2),
+                'call_trend_15d': round(call_trend, 1),
+                'mail_trend_15d': round(mail_trend, 1),
+                'call_volatility': round(call_volatility, 1),
+                'mail_volatility': round(mail_volatility, 1),
+                'best_correlation': round(best_correlation, 3),
+                'best_lag_days': int(best_lag),
+                'avg_calls_per_1k_mails': round(avg_calls_per_1k_mails, 1),
+                'data_quality_score': self._calculate_data_quality_score()
+            }
+            
+            self.logger.info("✅ Efficiency metrics calculated", {
+                'metrics_calculated': len(self.efficiency_metrics),
+                'response_rate': f"{response_rate:.2f}%",
+                'best_correlation': best_correlation,
+                'data_quality_score': self.efficiency_metrics['data_quality_score']
             })
             
             return True
-        else:
-            self.logger.warning("No intent correlations calculated")
-            return False
             
-    except Exception as e:
-        self.logger.error("❌ Intent correlation analysis failed", e)
-        return False
+        except Exception as e:
+            self.logger.error("❌ Efficiency calculation failed", e)
+            return False
 
-def calculate_efficiency_metrics(self) -> bool:
-    """
-    Calculate comprehensive efficiency and performance metrics
-    """
-    try:
-        if self.combined_df.empty:
-            self.logger.warning("No data available for efficiency calculations")
+    def _calculate_data_quality_score(self) -> float:
+        """
+        Calculate an overall data quality score (0-100)
+        """
+        try:
+            score = 100
+            
+            # Penalize for missing data
+            if not self.has_call_volume_data:
+                score -= 30
+            if not self.has_mail_data:
+                score -= 30
+            if not self.has_call_intent_data:
+                score -= 10
+            if not self.has_financial_data:
+                score -= 5
+            
+            # Penalize for data quality issues
+            total_processed = self.data_quality_metrics.get('total_records_processed', 1)
+            outliers_removed = self.data_quality_metrics.get('outliers_removed', 0)
+            
+            if total_processed > 0:
+                outlier_rate = outliers_removed / total_processed
+                score -= min(outlier_rate * 100, 15)  # Max 15 points penalty
+            
+            # Bonus for good sample size
+            if len(self.combined_df) >= 100:
+                score += 5
+            
+            return max(0, min(100, score))
+            
+        except Exception:
+            return 50  # Default score if calculation fails
+    def master_data_pipeline(self) -> bool:
+            """
+            Master data processing pipeline - orchestrates all data operations
+            """
+            self.logger.info("🚀 Starting master data processing pipeline...")
+            
+            try:
+                # Phase 1: Data Loading
+                self.logger.info("📥 Phase 1: Data Loading")
+                
+                # Load call volume data (primary)
+                call_volume_success = self.load_call_volume_data()
+                
+                # Load call intent data (secondary)
+                call_intent_success = self.load_call_intent_data()
+                
+                # Load mail data
+                mail_success = self.load_mail_data()
+                
+                # Load financial data
+                financial_success = self.load_financial_data()
+                
+                # Check if we have minimum required data
+                if not call_volume_success and not call_intent_success:
+                    self.logger.warning("⚠️ No call data available, creating sample data...")
+                    if not self.create_sample_data():
+                        self.logger.error("❌ Failed to create sample data")
+                        return False
+                
+                # Phase 2: Data Combination and Processing
+                self.logger.info("⚙️ Phase 2: Data Combination and Processing")
+                
+                if not self.combine_and_process_data():
+                    self.logger.error("❌ Data combination failed")
+                    return False
+                
+                # Phase 3: Advanced Analytics
+                self.logger.info("🔬 Phase 3: Advanced Analytics")
+                
+                # Enhanced correlation analysis
+                correlation_success = self.analyze_enhanced_correlations()
+                
+                # Rolling correlation analysis
+                rolling_success = self.analyze_rolling_correlation()
+                
+                # Intent correlation analysis (if data available)
+                intent_success = self.analyze_intent_correlation()
+                
+                # Efficiency metrics
+                efficiency_success = self.calculate_efficiency_metrics()
+                
+                # Phase 4: Advanced Features
+                self.logger.info("🎯 Phase 4: Advanced Features")
+                
+                # Anomaly detection
+                anomaly_success = self.detect_anomalies()
+                
+                # Time series decomposition
+                decomposition_success = self.perform_time_series_decomposition()
+                
+                # Final status report
+                self.logger.info("=" * 70)
+                self.logger.info("🎉 MASTER DATA PIPELINE COMPLETED")
+                self.logger.info("=" * 70)
+                
+                pipeline_results = {
+                    'data_loading': {
+                        'call_volume': call_volume_success,
+                        'call_intent': call_intent_success,
+                        'mail': mail_success,
+                        'financial': financial_success
+                    },
+                    'data_processing': {
+                        'combination': True,
+                        'records_processed': len(self.combined_df)
+                    },
+                    'analytics': {
+                        'correlation': correlation_success,
+                        'rolling_correlation': rolling_success,
+                        'intent_correlation': intent_success,
+                        'efficiency_metrics': efficiency_success
+                    },
+                    'advanced_features': {
+                        'anomaly_detection': anomaly_success,
+                        'time_series_decomposition': decomposition_success
+                    },
+                    'data_quality': self.data_quality_metrics
+                }
+                
+                self.logger.info("Pipeline Results:", pipeline_results)
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error("❌ Master data pipeline failed", e)
+                return False
+                
+    def detect_anomalies(self) -> bool:
+            """
+            Detect anomalies in mail-call relationship patterns
+            """
+            if not SKLEARN_AVAILABLE or self.combined_df.empty:
+                self.logger.warning("Anomaly detection skipped - missing dependencies or data")
+                return False
+            
+            self.logger.info("🔄 Detecting anomalies in communication patterns...")
+            
+            try:
+                df = self.combined_df.copy()
+                
+                # Prepare features for anomaly detection
+                features = ['call_volume', 'mail_volume', 'calls_per_1k_mails']
+                
+                # Add momentum features if available
+                momentum_features = [col for col in df.columns if 'momentum' in col and 'mail' in col]
+                features.extend(momentum_features[:2])  # Add top 2 momentum features
+                
+                # Filter to available features
+                available_features = [f for f in features if f in df.columns]
+                
+                if len(available_features) < 2:
+                    self.logger.warning("Insufficient features for anomaly detection")
+                    return False
+                
+                # Prepare feature matrix
+                feature_matrix = df[available_features].copy()
+                
+                # Handle missing values
+                feature_matrix = feature_matrix.fillna(feature_matrix.mean())
+                
+                # Normalize features
+                scaler = StandardScaler()
+                feature_matrix_scaled = scaler.fit_transform(feature_matrix)
+                
+                # Detect anomalies using Isolation Forest
+                iso_forest = IsolationForest(
+                    contamination=0.1,  # Expect 10% anomalies
+                    random_state=42,
+                    n_estimators=100
+                )
+                
+                anomaly_labels = iso_forest.fit_predict(feature_matrix_scaled)
+                anomaly_scores = iso_forest.decision_function(feature_matrix_scaled)
+                
+                # Add results to dataframe
+                df['anomaly_label'] = anomaly_labels
+                df['anomaly_score'] = anomaly_scores
+                df['is_anomaly'] = anomaly_labels == -1
+                
+                # Extract anomaly records
+                anomalies = df[df['is_anomaly']].copy()
+                
+                if not anomalies.empty:
+                    # Sort by anomaly score (most anomalous first)
+                    anomalies = anomalies.sort_values('anomaly_score').copy()
+                    
+                    # Add anomaly reasons
+                    anomaly_reasons = []
+                    for _, row in anomalies.iterrows():
+                        reasons = []
+                        
+                        # Check for volume anomalies
+                        if row['call_volume'] > df['call_volume'].quantile(0.95):
+                            reasons.append("High call volume")
+                        elif row['call_volume'] < df['call_volume'].quantile(0.05):
+                            reasons.append("Low call volume")
+                        
+                        if row['mail_volume'] > df['mail_volume'].quantile(0.95):
+                            reasons.append("High mail volume")
+                        elif row['mail_volume'] < df['mail_volume'].quantile(0.05):
+                            reasons.append("Low mail volume")
+                        
+                        # Check for ratio anomalies
+                        if 'calls_per_1k_mails' in row and row['calls_per_1k_mails'] > df['calls_per_1k_mails'].quantile(0.95):
+                            reasons.append("High call-to-mail ratio")
+                        
+                        anomaly_reasons.append("; ".join(reasons) if reasons else "Pattern anomaly")
+                    
+                    anomalies['anomaly_reason'] = anomaly_reasons
+                    
+                    self.anomaly_data = anomalies[['date', 'call_volume', 'mail_volume', 'anomaly_score', 'anomaly_reason']].copy()
+                    
+                    self.logger.info("✅ Anomaly detection completed", {
+                        'total_anomalies': len(anomalies),
+                        'anomaly_rate': f"{len(anomalies)/len(df)*100:.1f}%",
+                        'most_anomalous_date': anomalies.iloc[0]['date'].strftime('%Y-%m-%d'),
+                        'features_used': available_features
+                    })
+                    
+                    return True
+                else:
+                    self.logger.info("No anomalies detected in the data")
+                    return False
+                    
+            except Exception as e:
+                self.logger.error("❌ Anomaly detection failed", e)
+                return False
+        
+    def perform_time_series_decomposition(self) -> bool:
+        """
+        Perform time series decomposition for trend, seasonal, and residual components
+        """
+        if not STATSMODELS_AVAILABLE or self.combined_df.empty:
+            self.logger.warning("Time series decomposition skipped - missing dependencies or data")
             return False
         
-        df = self.combined_df
+        self.logger.info("🔄 Performing time series decomposition...")
         
-        # Basic volume metrics
-        total_calls = df['call_volume'].sum()
-        total_mail = df['mail_volume'].sum()
-        avg_daily_calls = df['call_volume'].mean()
-        avg_daily_mail = df['mail_volume'].mean()
-        
-        # Response rate
-        response_rate = (total_calls / total_mail * 100) if total_mail > 0 else 0
-        
-        # Efficiency trends
-        if len(df) >= 30:
-            recent_15 = df.tail(15)['call_volume'].mean()
-            previous_15 = df.iloc[-30:-15]['call_volume'].mean()
-            call_trend = ((recent_15 - previous_15) / previous_15 * 100) if previous_15 > 0 else 0
+        try:
+            df = self.combined_df.copy()
             
-            recent_15_mail = df.tail(15)['mail_volume'].mean()
-            previous_15_mail = df.iloc[-30:-15]['mail_volume'].mean()
-            mail_trend = ((recent_15_mail - previous_15_mail) / previous_15_mail * 100) if previous_15_mail > 0 else 0
-        else:
-            call_trend = 0
-            mail_trend = 0
-        
-        # Volatility measures
-        call_volatility = df['call_volume'].std() / df['call_volume'].mean() * 100 if df['call_volume'].mean() > 0 else 0
-        mail_volatility = df['mail_volume'].std() / df['mail_volume'].mean() * 100 if df['mail_volume'].mean() > 0 else 0
-        
-        # Correlation-based metrics
-        best_correlation = 0
-        best_lag = 0
-        
-        if not self.momentum_correlation_results.empty:
-            best_row = self.momentum_correlation_results.iloc[0]
-            best_correlation = best_row['correlation']
-            best_lag = best_row['lag_days']
-        
-        # Efficiency ratios
-        avg_calls_per_1k_mails = df['calls_per_1k_mails'].mean() if 'calls_per_1k_mails' in df.columns else 0
-        
-        self.efficiency_metrics = {
-            'total_calls': int(total_calls),
-            'total_mail': int(total_mail),
-            'avg_daily_calls': round(avg_daily_calls, 1),
-            'avg_daily_mail': round(avg_daily_mail, 0),
-            'response_rate_pct': round(response_rate, 2),
-            'call_trend_15d': round(call_trend, 1),
-            'mail_trend_15d': round(mail_trend, 1),
-            'call_volatility': round(call_volatility, 1),
-            'mail_volatility': round(mail_volatility, 1),
-            'best_correlation': round(best_correlation, 3),
-            'best_lag_days': int(best_lag),
-            'avg_calls_per_1k_mails': round(avg_calls_per_1k_mails, 1),
-            'data_quality_score': self._calculate_data_quality_score()
-        }
-        
-        self.logger.info("✅ Efficiency metrics calculated", {
-            'metrics_calculated': len(self.efficiency_metrics),
-            'response_rate': f"{response_rate:.2f}%",
-            'best_correlation': best_correlation,
-            'data_quality_score': self.efficiency_metrics['data_quality_score']
-        })
-        
-        return True
-        
-    except Exception as e:
-        self.logger.error("❌ Efficiency calculation failed", e)
-        return False
+            if len(df) < 50:  # Need enough data for decomposition
+                self.logger.warning("Insufficient data for time series decomposition")
+                return False
+            
+            # Set date as index
+            df = df.set_index('date').sort_index()
+            
+            decomposition_results = {}
+            
+            # Decompose call volume
+            try:
+                call_decomp = seasonal_decompose(
+                    df['call_volume'], 
+                    model='additive',
+                    period=7,  # Weekly seasonality
+                    extrapolate_trend='freq'
+                )
+                
+                decomposition_results['call_volume'] = {
+                    'trend': call_decomp.trend,
+                    'seasonal': call_decomp.seasonal,
+                    'residual': call_decomp.resid,
+                    'observed': call_decomp.observed
+                }
+                
+                self.logger.info("✅ Call volume decomposition completed")
+                
+            except Exception as e:
+                self.logger.warning(f"Call volume decomposition failed: {e}")
+            
+            # Decompose mail volume
+            try:
+                mail_decomp = seasonal_decompose(
+                    df['mail_volume'], 
+                    model='additive',
+                    period=7,  # Weekly seasonality
+                    extrapolate_trend='freq'
+                )
+                
+                decomposition_results['mail_volume'] = {
+                    'trend': mail_decomp.trend,
+                    'seasonal': mail_decomp.seasonal,
+                    'residual': mail_decomp.resid,
+                    'observed': mail_decomp.observed
+                }
+                
+                self.logger.info("✅ Mail volume decomposition completed")
+                
+            except Exception as e:
+                self.logger.warning(f"Mail volume decomposition failed: {e}")
+            
+            if decomposition_results:
+                self.decomposition_results = decomposition_results
+                
+                # Calculate decomposition statistics
+                stats = {}
+                for series_name, components in decomposition_results.items():
+                    stats[series_name] = {
+                        'trend_strength': components['trend'].std() / components['observed'].std(),
+                        'seasonal_strength': components['seasonal'].std() / components['observed'].std(),
+                        'residual_strength': components['residual'].std() / components['observed'].std()
+                    }
+                
+                self.logger.info("✅ Time series decomposition completed", {
+                    'series_decomposed': len(decomposition_results),
+                    'decomposition_stats': stats
+                })
+                
+                return True
+            else:
+                self.logger.warning("No successful decompositions completed")
+                return False
+                
+        except Exception as e:
+            self.logger.error("❌ Time series decomposition failed", e)
+            return False
 
-def _calculate_data_quality_score(self) -> float:
-    """
-    Calculate an overall data quality score (0-100)
-    """
-    try:
-        score = 100
-        
-        # Penalize for missing data
-        if not self.has_call_volume_data:
-            score -= 30
-        if not self.has_mail_data:
-            score -= 30
-        if not self.has_call_intent_data:
-            score -= 10
-        if not self.has_financial_data:
-            score -= 5
-        
-        # Penalize for data quality issues
-        total_processed = self.data_quality_metrics.get('total_records_processed', 1)
-        outliers_removed = self.data_quality_metrics.get('outliers_removed', 0)
-        
-        if total_processed > 0:
-            outlier_rate = outliers_removed / total_processed
-            score -= min(outlier_rate * 100, 15)  # Max 15 points penalty
-        
-        # Bonus for good sample size
-        if len(self.combined_df) >= 100:
-            score += 5
-        
-        return max(0, min(100, score))
-        
-    except Exception:
-        return 50  # Default score if calculation fails
-def master_data_pipeline(self) -> bool:
+    def master_data_pipeline(self) -> bool:
         """
         Master data processing pipeline - orchestrates all data operations
         """
@@ -1699,294 +1987,6 @@ def master_data_pipeline(self) -> bool:
         except Exception as e:
             self.logger.error("❌ Master data pipeline failed", e)
             return False
-              
-def detect_anomalies(self) -> bool:
-        """
-        Detect anomalies in mail-call relationship patterns
-        """
-        if not SKLEARN_AVAILABLE or self.combined_df.empty:
-            self.logger.warning("Anomaly detection skipped - missing dependencies or data")
-            return False
-        
-        self.logger.info("🔄 Detecting anomalies in communication patterns...")
-        
-        try:
-            df = self.combined_df.copy()
-            
-            # Prepare features for anomaly detection
-            features = ['call_volume', 'mail_volume', 'calls_per_1k_mails']
-            
-            # Add momentum features if available
-            momentum_features = [col for col in df.columns if 'momentum' in col and 'mail' in col]
-            features.extend(momentum_features[:2])  # Add top 2 momentum features
-            
-            # Filter to available features
-            available_features = [f for f in features if f in df.columns]
-            
-            if len(available_features) < 2:
-                self.logger.warning("Insufficient features for anomaly detection")
-                return False
-            
-            # Prepare feature matrix
-            feature_matrix = df[available_features].copy()
-            
-            # Handle missing values
-            feature_matrix = feature_matrix.fillna(feature_matrix.mean())
-            
-            # Normalize features
-            scaler = StandardScaler()
-            feature_matrix_scaled = scaler.fit_transform(feature_matrix)
-            
-            # Detect anomalies using Isolation Forest
-            iso_forest = IsolationForest(
-                contamination=0.1,  # Expect 10% anomalies
-                random_state=42,
-                n_estimators=100
-            )
-            
-            anomaly_labels = iso_forest.fit_predict(feature_matrix_scaled)
-            anomaly_scores = iso_forest.decision_function(feature_matrix_scaled)
-            
-            # Add results to dataframe
-            df['anomaly_label'] = anomaly_labels
-            df['anomaly_score'] = anomaly_scores
-            df['is_anomaly'] = anomaly_labels == -1
-            
-            # Extract anomaly records
-            anomalies = df[df['is_anomaly']].copy()
-            
-            if not anomalies.empty:
-                # Sort by anomaly score (most anomalous first)
-                anomalies = anomalies.sort_values('anomaly_score').copy()
-                
-                # Add anomaly reasons
-                anomaly_reasons = []
-                for _, row in anomalies.iterrows():
-                    reasons = []
-                    
-                    # Check for volume anomalies
-                    if row['call_volume'] > df['call_volume'].quantile(0.95):
-                        reasons.append("High call volume")
-                    elif row['call_volume'] < df['call_volume'].quantile(0.05):
-                        reasons.append("Low call volume")
-                    
-                    if row['mail_volume'] > df['mail_volume'].quantile(0.95):
-                        reasons.append("High mail volume")
-                    elif row['mail_volume'] < df['mail_volume'].quantile(0.05):
-                        reasons.append("Low mail volume")
-                    
-                    # Check for ratio anomalies
-                    if 'calls_per_1k_mails' in row and row['calls_per_1k_mails'] > df['calls_per_1k_mails'].quantile(0.95):
-                        reasons.append("High call-to-mail ratio")
-                    
-                    anomaly_reasons.append("; ".join(reasons) if reasons else "Pattern anomaly")
-                
-                anomalies['anomaly_reason'] = anomaly_reasons
-                
-                self.anomaly_data = anomalies[['date', 'call_volume', 'mail_volume', 'anomaly_score', 'anomaly_reason']].copy()
-                
-                self.logger.info("✅ Anomaly detection completed", {
-                    'total_anomalies': len(anomalies),
-                    'anomaly_rate': f"{len(anomalies)/len(df)*100:.1f}%",
-                    'most_anomalous_date': anomalies.iloc[0]['date'].strftime('%Y-%m-%d'),
-                    'features_used': available_features
-                })
-                
-                return True
-            else:
-                self.logger.info("No anomalies detected in the data")
-                return False
-                
-        except Exception as e:
-            self.logger.error("❌ Anomaly detection failed", e)
-            return False
-    
-def perform_time_series_decomposition(self) -> bool:
-    """
-    Perform time series decomposition for trend, seasonal, and residual components
-    """
-    if not STATSMODELS_AVAILABLE or self.combined_df.empty:
-        self.logger.warning("Time series decomposition skipped - missing dependencies or data")
-        return False
-    
-    self.logger.info("🔄 Performing time series decomposition...")
-    
-    try:
-        df = self.combined_df.copy()
-        
-        if len(df) < 50:  # Need enough data for decomposition
-            self.logger.warning("Insufficient data for time series decomposition")
-            return False
-        
-        # Set date as index
-        df = df.set_index('date').sort_index()
-        
-        decomposition_results = {}
-        
-        # Decompose call volume
-        try:
-            call_decomp = seasonal_decompose(
-                df['call_volume'], 
-                model='additive',
-                period=7,  # Weekly seasonality
-                extrapolate_trend='freq'
-            )
-            
-            decomposition_results['call_volume'] = {
-                'trend': call_decomp.trend,
-                'seasonal': call_decomp.seasonal,
-                'residual': call_decomp.resid,
-                'observed': call_decomp.observed
-            }
-            
-            self.logger.info("✅ Call volume decomposition completed")
-            
-        except Exception as e:
-            self.logger.warning(f"Call volume decomposition failed: {e}")
-        
-        # Decompose mail volume
-        try:
-            mail_decomp = seasonal_decompose(
-                df['mail_volume'], 
-                model='additive',
-                period=7,  # Weekly seasonality
-                extrapolate_trend='freq'
-            )
-            
-            decomposition_results['mail_volume'] = {
-                'trend': mail_decomp.trend,
-                'seasonal': mail_decomp.seasonal,
-                'residual': mail_decomp.resid,
-                'observed': mail_decomp.observed
-            }
-            
-            self.logger.info("✅ Mail volume decomposition completed")
-            
-        except Exception as e:
-            self.logger.warning(f"Mail volume decomposition failed: {e}")
-        
-        if decomposition_results:
-            self.decomposition_results = decomposition_results
-            
-            # Calculate decomposition statistics
-            stats = {}
-            for series_name, components in decomposition_results.items():
-                stats[series_name] = {
-                    'trend_strength': components['trend'].std() / components['observed'].std(),
-                    'seasonal_strength': components['seasonal'].std() / components['observed'].std(),
-                    'residual_strength': components['residual'].std() / components['observed'].std()
-                }
-            
-            self.logger.info("✅ Time series decomposition completed", {
-                'series_decomposed': len(decomposition_results),
-                'decomposition_stats': stats
-            })
-            
-            return True
-        else:
-            self.logger.warning("No successful decompositions completed")
-            return False
-            
-    except Exception as e:
-        self.logger.error("❌ Time series decomposition failed", e)
-        return False
-
-def master_data_pipeline(self) -> bool:
-    """
-    Master data processing pipeline - orchestrates all data operations
-    """
-    self.logger.info("🚀 Starting master data processing pipeline...")
-    
-    try:
-        # Phase 1: Data Loading
-        self.logger.info("📥 Phase 1: Data Loading")
-        
-        # Load call volume data (primary)
-        call_volume_success = self.load_call_volume_data()
-        
-        # Load call intent data (secondary)
-        call_intent_success = self.load_call_intent_data()
-        
-        # Load mail data
-        mail_success = self.load_mail_data()
-        
-        # Load financial data
-        financial_success = self.load_financial_data()
-        
-        # Check if we have minimum required data
-        if not call_volume_success and not call_intent_success:
-            self.logger.warning("⚠️ No call data available, creating sample data...")
-            if not self.create_sample_data():
-                self.logger.error("❌ Failed to create sample data")
-                return False
-        
-        # Phase 2: Data Combination and Processing
-        self.logger.info("⚙️ Phase 2: Data Combination and Processing")
-        
-        if not self.combine_and_process_data():
-            self.logger.error("❌ Data combination failed")
-            return False
-        
-        # Phase 3: Advanced Analytics
-        self.logger.info("🔬 Phase 3: Advanced Analytics")
-        
-        # Enhanced correlation analysis
-        correlation_success = self.analyze_enhanced_correlations()
-        
-        # Rolling correlation analysis
-        rolling_success = self.analyze_rolling_correlation()
-        
-        # Intent correlation analysis (if data available)
-        intent_success = self.analyze_intent_correlation()
-        
-        # Efficiency metrics
-        efficiency_success = self.calculate_efficiency_metrics()
-        
-        # Phase 4: Advanced Features
-        self.logger.info("🎯 Phase 4: Advanced Features")
-        
-        # Anomaly detection
-        anomaly_success = self.detect_anomalies()
-        
-        # Time series decomposition
-        decomposition_success = self.perform_time_series_decomposition()
-        
-        # Final status report
-        self.logger.info("=" * 70)
-        self.logger.info("🎉 MASTER DATA PIPELINE COMPLETED")
-        self.logger.info("=" * 70)
-        
-        pipeline_results = {
-            'data_loading': {
-                'call_volume': call_volume_success,
-                'call_intent': call_intent_success,
-                'mail': mail_success,
-                'financial': financial_success
-            },
-            'data_processing': {
-                'combination': True,
-                'records_processed': len(self.combined_df)
-            },
-            'analytics': {
-                'correlation': correlation_success,
-                'rolling_correlation': rolling_success,
-                'intent_correlation': intent_success,
-                'efficiency_metrics': efficiency_success
-            },
-            'advanced_features': {
-                'anomaly_detection': anomaly_success,
-                'time_series_decomposition': decomposition_success
-            },
-            'data_quality': self.data_quality_metrics
-        }
-        
-        self.logger.info("Pipeline Results:", pipeline_results)
-        
-        return True
-        
-    except Exception as e:
-        self.logger.error("❌ Master data pipeline failed", e)
-        return False
 
 # =============================================================================
 # PREMIUM DASHBOARD VISUALIZATIONS v3.0
@@ -2103,7 +2103,7 @@ class PremiumDashboardVisualizations:
                     y=df['call_volume_normalized'] if 'call_volume_normalized' in df.columns else df['call_volume'],
                     name='Call Volume',
                     line={
-                        'color': self.theme.primary_red,
+                        'color': self.theme.primary_rose,
                         'width': 4,
                         'shape': 'spline'
                     },
@@ -2177,7 +2177,7 @@ class PremiumDashboardVisualizations:
                     y=df['call_volume'],
                     name='Daily Call Volume',
                     line={
-                        'color': self.theme.primary_red,
+                        'color': self.theme.primary_rose,
                         'width': 5
                     },
                     mode='lines+markers',
@@ -2443,7 +2443,7 @@ class PremiumDashboardVisualizations:
                 mode='lines',
                 name=f'Trend Line (R² = {r2:.3f})',
                 line={
-                    'color': self.theme.primary_red,
+                    'color': self.theme.primary_rose,
                     'width': 4,
                     'dash': 'dash'
                 },
@@ -2559,7 +2559,7 @@ class PremiumDashboardVisualizations:
                         y=components['trend'],
                         mode='lines',
                         name='Trend',
-                        line={'color': self.theme.primary_red, 'width': 3},
+                        line={'color': self.theme.primary_rose, 'width': 3},
                         hovertemplate='<b>Trend</b><br>Date: %{x}<br>Value: %{y:,.1f}<extra></extra>'
                     ),
                     row=2, col=1
@@ -2755,6 +2755,73 @@ class PremiumDashboardVisualizations:
 # =============================================================================
 # MAIN EXECUTION FUNCTION
 # =============================================================================
+
+
+# =============================================================================
+# ENTERPRISE DASHBOARD APPLICATION v3.0
+# =============================================================================
+
+class EnterpriseDashboardApp:
+    """
+    Enterprise-grade dashboard application with premium UX/UI
+    """
+    
+    def __init__(self, data_processor: EnterpriseDataProcessor):
+        self.dp = data_processor
+        self.logger = data_processor.logger
+        self.theme = THEME
+        self.config = ENTERPRISE_CONFIG
+        
+        if not DASH_AVAILABLE:
+            self.logger.error("❌ Dash framework not available - cannot create dashboard")
+            raise ImportError("Dash framework required for dashboard")
+        
+        # Initialize Dash app with premium theme
+        self.app = dash.Dash(
+            __name__,
+            external_stylesheets=[dbc.themes.BOOTSTRAP],
+        )
+        
+        self.app.title = "Customer Communications Intelligence v3.0"
+        
+        # Initialize visualization suite
+        self.viz = PremiumDashboardVisualizations(data_processor)
+        
+        # Setup dashboard
+        self.setup_layout()
+        self.setup_callbacks()
+        
+        self.logger.info("✅ Enterprise Dashboard Application v3.0 initialized")
+    
+    def setup_layout(self):
+        """Setup basic dashboard layout"""
+        self.app.layout = html.Div([
+            html.H1("Customer Communications Intelligence v3.0"),
+            html.P("Dashboard loading..."),
+            dcc.Graph(id='main-chart', figure=self.viz.create_premium_overview_chart(self.dp.combined_df))
+        ])
+    
+    def setup_callbacks(self):
+        """Setup basic callbacks"""
+        pass
+    
+    def run(self, debug: bool = False, port: int = 8050, host: str = '127.0.0.1'):
+        """Run the dashboard"""
+        try:
+            self.logger.info(f"🚀 Starting Enterprise Dashboard v3.0 at http://{host}:{port}")
+            self.app.run(debug=debug, port=port, host=host)
+        except Exception as e:
+            self.logger.error("❌ Dashboard failed to start", e)
+            raise
+
+
+
+
+
+
+
+
+
 
 def main():
     """
@@ -2982,108 +3049,3 @@ if __name__ == '__main__':
 # =============================================================================
 # END OF ENHANCED CUSTOMER COMMUNICATIONS DASHBOARD v3.0
 # =============================================================================
-
-
-
-
-
-
-
-PS C:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent> & C:/Users/BhungarD/python.exe "c:/Users/BhungarD/OneDrive - Computershare/Desktop/prod - mail call analysis and intent/eda.py"
-🔍 SYSTEM PRE-FLIGHT CHECK:
-==================================================
-   Plotly         : ✅ AVAILABLE
-   Dash           : ✅ AVAILABLE
-   SciPy          : ✅ AVAILABLE
-   Scikit-learn   : ✅ AVAILABLE
-   Statsmodels    : ✅ AVAILABLE
-   yfinance       : ✅ AVAILABLE
-==================================================
-✅ All critical dependencies available!
-🚀 Starting Enterprise Dashboard v3.0...
-
-🔥 CUSTOMER COMMUNICATIONS INTELLIGENCE DASHBOARD v3.0
-================================================================================
-🎯 ENTERPRISE FEATURES:
-   • Dual call data source management (volume + intents)
-   • Mail data filtered to call data presence
-   • 4 NEW advanced plots: Lag Analysis, Scatter Trends, Time Series Decomposition, Anomaly Detection  
-   • Premium UX/UI with enhanced styling and interactivity
-   • Production-grade error handling and logging
-   • Enhanced correlation analysis with multiple feature types
-   • Financial data normalization and proper scaling
-   • Top 10 + Other grouping for cleaner visualizations
-================================================================================
-14:22:26 | INFO | 🏗️ Initializing Enterprise Data Processor v3.0...
---- Logging error ---
-Traceback (most recent call last):
-  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
-    stream.write(msg + self.terminator)
-    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
-    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
-           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-UnicodeEncodeError: 'charmap' codec can't encode characters in position 65-66: character maps to <undefined>
-Call stack:
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2971, in <module>
-    success = main()
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2793, in main
-    logger.info("🏗️ Initializing Enterprise Data Processor v3.0...")
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
-    self.logger.info(message)
-Message: '🏗️ Initializing Enterprise Data Processor v3.0...'
-Arguments: ()
-14:22:26 | INFO | Enterprise Data Processor v3.0 initialized
-14:22:26 | INFO | 📥 Phase 1: Data Loading
---- Logging error ---
-Traceback (most recent call last):
-  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
-    stream.write(msg + self.terminator)
-    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
-    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
-           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4e5' in position 65: character maps to <undefined>
-Call stack:
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2971, in <module>
-    success = main()
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2799, in main
-    logger.info("📥 Phase 1: Data Loading")
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 323, in info
-    self.logger.info(message)
-Message: '📥 Phase 1: Data Loading'
-Arguments: ()
-14:22:26 | CRITICAL | ❌ Critical system failure | Exception: 'EnterpriseDataProcessor' object has no attribute 'load_call_volume_data' | Traceback: Traceback (most recent call last):
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2800, in main
-    call_volume_success = dp.load_call_volume_data()
-                          ^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'EnterpriseDataProcessor' object has no attribute 'load_call_volume_data'. Did you mean: 'has_call_volume_data'?
-
---- Logging error ---
-Traceback (most recent call last):
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2800, in main
-    call_volume_success = dp.load_call_volume_data()
-                          ^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'EnterpriseDataProcessor' object has no attribute 'load_call_volume_data'. Did you mean: 'has_call_volume_data'?
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "C:\Users\BhungarD\Lib\logging\__init__.py", line 1153, in emit
-    stream.write(msg + self.terminator)
-    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\BhungarD\Lib\encodings\cp1252.py", line 19, in encode
-    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
-           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 73: character maps to <undefined>
-Call stack:
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2971, in <module>
-    success = main()
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2920, in main
-    logger.critical("❌ Critical system failure", e)
-  File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 356, in critical
-    self.logger.critical(error_msg)
-Message: '❌ Critical system failure | Exception: \'EnterpriseDataProcessor\' object has no attribute \'load_call_volume_data\' | Traceback: Traceback (most recent call last):\n  File "c:\\Users\\BhungarD\\OneDrive - Computershare\\Desktop\\prod - mail call analysis and intent\\eda.py", line 2800, in main\n    call_volume_success = dp.load_call_volume_data()\n                          ^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'EnterpriseDataProcessor\' object has no attribute \'load_call_volume_data\'. Did you mean: \'has_call_volume_data\'?\n'
-Arguments: ()
-
-⚠️ Dashboard session ended with errors

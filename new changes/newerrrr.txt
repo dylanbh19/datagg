@@ -1,4 +1,131 @@
-   return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+
+
+
+Looking at your error log, the main issue is **Unicode encoding errors** when trying to log messages with emoji characters. The Windows console is using `cp1252` encoding which doesn't support Unicode emojis like 🔬, 🔄, ✅, etc.
+
+Here's how to fix all these errors:Now, here's how to implement these fixes in your existing code:
+
+## **Quick Fix (Recommended)**
+
+1. **Add this at the very beginning of your script** (right after the imports):
+
+```python
+# Add at the top of your script
+import sys
+import os
+
+# Force UTF-8 encoding on Windows
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+```
+
+2. **Replace your `EnterpriseLogger` class** with the fixed version from the artifact above.
+
+3. **Add emoji removal function** to your existing logger:
+
+```python
+def _remove_emojis(self, text: str) -> str:
+    """Remove emojis and replace with text equivalents"""
+    replacements = {
+        '🔄': '[PROCESSING]',
+        '✅': '[SUCCESS]',
+        '❌': '[ERROR]',
+        '⚠️': '[WARNING]',
+        '🔬': '[ANALYTICS]',
+        '🎯': '[TARGET]',
+        '📊': '[DASHBOARD]',
+        '📥': '[LOADING]',
+        '⚙️': '[PROCESSING]',
+        '🚀': '[STARTING]',
+        '🎨': '[INITIALIZING]',
+        '🌐': '[NETWORK]',
+        '🛑': '[STOP]',
+        '📈': '[METRICS]',
+        '🎉': '[COMPLETED]'
+    }
+    
+    result = text
+    for emoji, replacement in replacements.items():
+        result = result.replace(emoji, replacement)
+    
+    return result
+```
+
+## **Alternative: Run from Command Prompt with UTF-8**
+
+If you prefer to keep your code as-is, run it from a UTF-8 enabled command prompt:
+
+```cmd
+# Set UTF-8 code page
+chcp 65001
+
+# Set environment variable
+set PYTHONIOENCODING=utf-8
+
+# Run your script
+python your_script.py
+```
+
+## **Other Issues in Your Code**
+
+I also noticed this error in your log:
+```
+'PremiumVisualTheme' object has no attribute 'primary_red'
+```
+
+**Fix this by updating line 2106 in your `create_premium_overview_chart` method:**
+
+```python
+# Change this:
+'color': self.theme.primary_red,
+
+# To this:
+'color': self.theme.primary_rose,  # or self.theme.error
+```
+
+The `PremiumVisualTheme` class doesn't have `primary_red` - it has `primary_rose` instead.
+
+## **Summary of Fixes**
+
+1. **Unicode encoding**: Force UTF-8 encoding and add emoji fallbacks
+2. **Attribute error**: Fix `primary_red` → `primary_rose`
+3. **Logging safety**: Add try-catch blocks around logging operations
+4. **Environment setup**: Set proper encoding environment variables
+
+These fixes will resolve all the Unicode encoding errors you're seeing in your logs and make your application more robust on Windows systems.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+return codecs.charmap_encode(input,self.errors,encoding_table)[0]
            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f52c' in position 65: character maps to <undefined>
 Call stack:

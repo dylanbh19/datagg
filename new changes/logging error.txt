@@ -1,3 +1,118 @@
+To fix the `TypeError` in your `logging error.txt` file, you need to adjust how the `EnterpriseLogger` class is initialized and how its `__init__` method uses the provided configuration.
+
+[cite\_start]The error "TypeError: EnterpriseLogger.**init**() takes 2 positional arguments but 3 were given" [cite: 1] indicates that when you call `EnterpriseLogger`, you are passing too many arguments.
+
+Here's a breakdown of the problem and the solution:
+
+**Problem:**
+
+  * [cite\_start]Your `EnterpriseLogger` class's `__init__` method is defined to accept `self` and one `config` dictionary argument: `def __init__(self, config: Dict):`[cite: 11].
+  * [cite\_start]However, you are calling it with two explicit arguments: `logger = EnterpriseLogger("CustomerCommsDashboard", ENTERPRISE_CONFIG['LOG_LEVEL'])`[cite: 1]. The `self` argument is implicit, making it effectively three arguments being passed.
+
+**Solution:**
+
+To resolve this, you should modify your `ENTERPRISE_CONFIG` dictionary to include the `LOG_FILE_PATH` and `LOG_NAME`, and then pass the entire `ENTERPRISE_CONFIG` dictionary to the `EnterpriseLogger`. Also, the logger's level should be set dynamically from the config.
+
+Here are the changes you need to make in your `review.py` file based on the `logging error.txt` content:
+
+1.  **Update `ENTERPRISE_CONFIG`**: Add `LOG_FILE_PATH` and `LOG_NAME` to your `ENTERPRISE_CONFIG` dictionary. You should place the `logs` folder in the same directory as your script.
+
+    [cite\_start]Find this section (around [cite: 9]):
+
+    ```python
+    ENTERPRISE_CONFIG = {
+        # PRIMARY DATA SOURCES
+        'CALL_VOLUME_FILE': r'data\GenesysExtract_20250703.csv',           # Primary for correlations (Date column)
+        'CALL_INTENTS_FILE': r'data\GenesysExtract_20250609.csv',  # Secondary for intent analysis
+        'MAIL_FILE_PATH': r'merged_output.csv',                 # Mail data
+    ```
+
+    And add the log file path and name:
+
+    ```python
+    ENTERPRISE_CONFIG = {
+        # LOGGING CONFIGURATION
+        'LOG_FILE_PATH': r'logs\dashboard.log', # Define the log file path
+        'LOG_NAME': 'CustomerCommsDashboard',  # Define the logger name
+        # PRIMARY DATA SOURCES
+        'CALL_VOLUME_FILE': r'data\GenesysExtract_20250703.csv',           # Primary for correlations (Date column)
+        'CALL_INTENTS_FILE': r'data\GenesysExtract_20250609.csv',  # Secondary for intent analysis
+        'MAIL_FILE_PATH': r'merged_output.csv',                 # Mail data
+    ```
+
+2.  **Modify `EnterpriseLogger.__init__`**: In the `EnterpriseLogger` class, adjust the `__init__` method to retrieve the log level from the `config` dictionary.
+
+    [cite\_start]Find this section (around [cite: 11]):
+
+    ```python
+    class EnterpriseLogger:
+        def __init__(self, config: Dict):
+            self.log_file = config["LOG_FILE_PATH"]
+            self.logger = logging.getLogger(config["LOG_NAME"])
+            self.logger.setLevel(logging.INFO) # This line needs change
+    ```
+
+    Change `self.logger.setLevel(logging.INFO)` to dynamically use the `LOG_LEVEL` from your `ENTERPRISE_CONFIG`:
+
+    ```python
+    class EnterpriseLogger:
+        def __init__(self, config: Dict):
+            self.log_file = config["LOG_FILE_PATH"]
+            self.logger = logging.getLogger(config["LOG_NAME"])
+            # Set log level dynamically from config
+            self.logger.setLevel(getattr(logging, config.get('LOG_LEVEL', LogLevel.INFO).name))
+    ```
+
+    *Note: `getattr(logging, config.get('LOG_LEVEL', LogLevel.INFO).name)` is used to safely get the logging level from the `LogLevel` enum and convert it to the corresponding `logging` module constant.*
+
+3.  **Correct the `EnterpriseLogger` initialization call**: Change how `EnterpriseLogger` is instantiated in your `main` function (or wherever it's called).
+
+    [cite\_start]Find this line (around [cite: 1]):
+
+    ```python
+    logger = EnterpriseLogger("CustomerCommsDashboard", ENTERPRISE_CONFIG['LOG_LEVEL'])
+    ```
+
+    Replace it with:
+
+    ```python
+    logger = EnterpriseLogger(ENTERPRISE_CONFIG)
+    ```
+
+By making these changes, the `EnterpriseLogger` will be initialized correctly with a single configuration dictionary, resolving the `TypeError`.
+
+This fix ensures that the logging system is properly configured according to the `ENTERPRISE_CONFIG` and aligns with the `EnterpriseLogger` class's expected arguments.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Traceback (most recent call last):
   File "c:\Users\BhungarD\OneDrive - Computershare\Desktop\prod - mail call analysis and intent\eda.py", line 2956, in <module>
     success = main()

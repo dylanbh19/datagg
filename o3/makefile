@@ -17,3 +17,8 @@ make interpret       # SHAP summary + top-5 PDPs
 # ------------- DELIVERY (Stage 4) ------------------------
 make dashboard       # launches Dash on http://127.0.0.1:8050
 make ppt            # generates output/COO_presentation.pptx
+
+
+
+
+make ingest augment econ eda_ts mail_eff econ_sens patterns features model_train interpret ppt

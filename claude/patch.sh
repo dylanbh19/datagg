@@ -62,35 +62,46 @@ check_project_structure() {
 }
 
 patch_config_file() {
-    print_info "Patching configuration file..."
+    print_info "Patching configuration file with your column names..."
     
     # Create backup
     cp config/config.yaml config/config.yaml.backup
     
-    # Replace mail configuration section
-    cat > temp_mail_config.yaml << 'EOF'
-  # Mail data (combined types and volumes in single file)
-  mail_data:
-    file_path: "data/raw/mail_data.csv"
-    date_column: "date"              # Column containing dates
-    type_column: "mail_type"         # Column containing mail type categories (strings)
-    volume_column: "mail_volume"     # Column containing volume per type (integers)
-EOF
+    # Create new config with correct column names
+    python3 << 'EOF'
+import yaml
 
-    # Use sed to replace the mail_volume and mail_types sections
-    sed '/^  # Mail volume data/,/^  # Mail types data/c\
-  # Mail data (combined types and volumes in single file)\
-  mail_data:\
-    file_path: "data/raw/mail_data.csv"\
-    date_column: "date"              # Column containing dates\
-    type_column: "mail_type"         # Column containing mail type categories (strings)\
-    volume_column: "mail_volume"     # Column containing volume per type (integers)' config/config.yaml > config/config_temp.yaml
+# Read the original config
+with open('config/config.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+# Update data section with correct file paths and column names
+config['data'] = {
+    'call_volume': {
+        'file_path': "data/raw/call_volume.csv",
+        'date_column': "Date",
+        'volume_column': "call_volume"
+    },
+    'call_intents': {
+        'file_path': "data/raw/call_intents.csv", 
+        'date_column': "ConversationStart",
+        'intent_column': "uui_Intent",
+        'volume_column': "intent_volume"
+    },
+    'mail_data': {
+        'file_path': "data/raw/mail.csv",
+        'date_column': "mail_date",
+        'type_column': "mail_type", 
+        'volume_column': "mail_volume"
+    }
+}
+
+# Write back to file
+with open('config/config.yaml', 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, indent=2)
+EOF
     
-    # Remove the remaining mail_types section
-    sed '/^  # Mail types data/,/^$/d' config/config_temp.yaml > config/config.yaml
-    rm config/config_temp.yaml
-    
-    print_success "Configuration file patched"
+    print_success "Configuration file patched with your column names"
 }
 
 patch_data_loader() {
@@ -153,7 +164,7 @@ EOF
 }
 
 patch_main_script() {
-    print_info "Patching main execution script..."
+    print_info "Patching main execution script for your data..."
     
     # Create backup
     cp src/main.py src/main.py.backup
@@ -172,11 +183,12 @@ new_code = '''        # Load mail data
         mail_df = data_loader.load_mail_data()
         
         # Create aggregated mail volume for time series analysis
-        mail_volume_df = mail_df.groupby('date')['mail_volume'].sum().reset_index()'''
+        mail_volume_df = mail_df.groupby('mail_date')['mail_volume'].sum().reset_index()
+        mail_volume_df.rename(columns={'mail_date': 'date'}, inplace=True)'''
 
 content = re.sub(old_pattern, new_code, content)
 
-# Update visualization calls
+# Update visualization calls to use mail_df instead of mail_types_df
 content = content.replace('mail_types_df, call_volume_df', 'mail_df, call_volume_df')
 content = content.replace('mail_types_df,', 'mail_df,')
 
@@ -185,7 +197,7 @@ with open('src/main.py', 'w') as f:
     f.write(content)
 EOF
 
-    print_success "Main script patched"
+    print_success "Main script patched for your data"
 }
 
 patch_visualization() {
@@ -223,51 +235,62 @@ EOF
 }
 
 create_sample_mail_data() {
-    print_info "Creating sample mail data file..."
+    print_info "Removing sample data files..."
     
-    # Create the combined sample mail data
-    cat > data/raw/sample_mail_data.csv << 'EOF'
-date,mail_type,mail_volume
-2023-01-01,promotional,500
-2023-01-01,statement,300
-2023-01-01,reminder,200
-2023-01-02,promotional,600
-2023-01-02,statement,350
-2023-01-02,reminder,250
-2023-01-03,promotional,450
-2023-01-03,statement,300
-2023-01-03,reminder,200
-2023-01-04,promotional,550
-2023-01-04,statement,320
-2023-01-04,reminder,230
-2023-01-05,promotional,650
-2023-01-05,statement,400
-2023-01-05,reminder,250
-2023-01-06,promotional,400
-2023-01-06,statement,250
-2023-01-06,reminder,150
-2023-01-07,promotional,380
-2023-01-07,statement,220
-2023-01-07,reminder,150
-2023-01-08,promotional,520
-2023-01-08,statement,330
-2023-01-08,reminder,200
-2023-01-09,promotional,580
-2023-01-09,statement,370
-2023-01-09,reminder,200
-2023-01-10,promotional,620
-2023-01-10,statement,380
-2023-01-10,reminder,250
-2023-01-11,promotional,540
-2023-01-11,statement,340
-2023-01-11,reminder,200
-2023-01-12,promotional,610
-2023-01-12,statement,390
-2023-01-12,reminder,220
-2023-01-13,promotional,590
-2023-01-13,statement,370
-2023-01-13,reminder,220
-2023-01-14,promotional,440
+    # Remove sample data files since we're using real data
+    rm -f data/raw/sample_*.csv
+    
+    print_success "Sample data files removed - ready for your real data"
+}
+
+update_quick_start_script() {
+    print_info "Updating run scripts for your data..."
+    
+    # Update the quick_start.sh to not copy sample files
+    if [ -f "quick_start.sh" ]; then
+        cp quick_start.sh quick_start.sh.backup
+        
+        # Replace the entire script to just check for real data
+        cat > quick_start.sh << 'EOF'
+#!/bin/bash
+
+# ================================================================================
+# DATA VALIDATION AND ANALYSIS SCRIPT
+# ================================================================================
+
+set -euo pipefail
+
+echo "Checking for required data files..."
+
+# Check if real data files exist
+if [ ! -f "data/raw/mail.csv" ]; then
+    echo "❌ data/raw/mail.csv not found"
+    echo "Please add your mail data file with columns: mail_date, mail_volume, mail_type"
+    exit 1
+fi
+
+if [ ! -f "data/raw/call_intents.csv" ]; then
+    echo "❌ data/raw/call_intents.csv not found" 
+    echo "Please add your call intents file with columns: ConversationStart, uui_Intent"
+    exit 1
+fi
+
+if [ ! -f "data/raw/call_volume.csv" ]; then
+    echo "❌ data/raw/call_volume.csv not found"
+    echo "Please add your call volume file with column: Date"
+    exit 1
+fi
+
+echo "✅ All data files found. Running analysis..."
+
+# Run the analysis
+./run_analysis.sh
+EOF
+        chmod +x quick_start.sh
+        
+        print_success "Quick start script updated for real data validation"
+    fi
+}-14,promotional,440
 2023-01-14,statement,280
 2023-01-14,reminder,170
 EOF
@@ -292,14 +315,14 @@ update_quick_start_script() {
 }
 
 update_documentation() {
-    print_info "Updating documentation..."
+    print_info "Updating documentation for your data format..."
     
     # Update README.md
     if [ -f "README.md" ]; then
         cp README.md README.md.backup
         
         # Update data requirements section
-        sed -i 's/- \*\*Mail Types Data\*\*: Date, mail type, volume by type/- **Mail Data**: Date, mail type, volume by type (combined in single file)/' README.md
+        sed -i 's/- \*\*Mail Types Data\*\*: Date, mail type, volume by type/- **Mail Data**: mail_date, mail_type, mail_volume (combined in single file)/' README.md
         sed -i '/- \*\*Mail Volume Data\*\*: Date, total mail volume/d' README.md
         
         print_success "Documentation updated"
@@ -307,48 +330,98 @@ update_documentation() {
 }
 
 create_data_format_guide() {
-    print_info "Creating updated data format guide..."
+    print_info "Creating data format guide for your column names..."
     
-    cat > config/mail_data_format.yaml << 'EOF'
+    cat > config/your_data_format.yaml << 'EOF'
 # ================================================================================
-# MAIL DATA FORMAT GUIDE (UPDATED)
+# YOUR DATA FORMAT GUIDE
 # ================================================================================
 
-# Expected format for the combined mail data file:
+# Expected format for your actual data files:
 
-mail_data_sample:
-  file_name: "mail_data.csv"
+mail_data:
+  file_name: "mail.csv"
   columns:
-    - date         # Format: YYYY-MM-DD
-    - mail_type    # String: type of mail sent (e.g., "promotional", "statement", "reminder")
-    - mail_volume  # Integer: number of mails of this type sent on this date
+    - mail_date    # Your date column
+    - mail_type    # Mail type categories 
+    - mail_volume  # Volume per type
   
-  example_rows:
-    - date: "2023-01-01"
-      mail_type: "promotional"
-      mail_volume: 500
-    - date: "2023-01-01"
-      mail_type: "statement"
-      mail_volume: 300
-    - date: "2023-01-01"
-      mail_type: "reminder"
-      mail_volume: 200
-    - date: "2023-01-02"
-      mail_type: "promotional"
-      mail_volume: 600
-  
-  notes:
-    - "Each row represents the volume of a specific mail type sent on a specific date"
-    - "Multiple rows per date are expected (one for each mail type)"
-    - "Mail types should be consistent strings (avoid variations like 'promo' vs 'promotional')"
-    - "Total daily mail volume will be calculated by summing all types per date"
+call_intents_data:
+  file_name: "call_intents.csv" 
+  columns:
+    - ConversationStart  # Your date column
+    - uui_Intent        # Intent categories
+    # Note: intent_volume will be calculated by counting rows per date/intent
+    
+call_volume_data:
+  file_name: "call_volume.csv"
+  columns:
+    - Date         # Your date column
+    - call_volume  # Total call volume (may have missing values)
+
+# File placement:
+# Place these files in data/raw/ directory:
+# - data/raw/mail.csv
+# - data/raw/call_intents.csv  
+# - data/raw/call_volume.csv
 EOF
 
-    print_success "Data format guide created"
+    print_success "Data format guide created for your column names"
+}
+
+patch_call_intents_logic() {
+    print_info "Patching call intents logic for your data structure..."
+    
+    # Update data loader to handle intent counting
+    python3 << 'EOF'
+# Read the data loader file
+with open('src/data/data_loader.py', 'r') as f:
+    content = f.read()
+
+# Add intent volume calculation logic
+new_intent_method = '''    def load_call_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Load call volume and intent data"""
+        logger.info("Loading call data...")
+        
+        # Load call volume data
+        call_vol_config = self.config['data']['call_volume']
+        call_volume_df = pd.read_csv(call_vol_config['file_path'])
+        call_volume_df[call_vol_config['date_column']] = pd.to_datetime(call_volume_df[call_vol_config['date_column']])
+        call_volume_df.rename(columns={call_vol_config['date_column']: 'date'}, inplace=True)
+        
+        # Load call intents data
+        call_int_config = self.config['data']['call_intents']
+        call_intents_df = pd.read_csv(call_int_config['file_path'])
+        call_intents_df[call_int_config['date_column']] = pd.to_datetime(call_intents_df[call_int_config['date_column']])
+        
+        # Calculate intent volumes by counting occurrences
+        call_intents_df['date'] = call_intents_df[call_int_config['date_column']].dt.date
+        call_intents_df['intent'] = call_intents_df[call_int_config['intent_column']]
+        
+        # Count intent volumes per date/intent combination
+        intent_counts = call_intents_df.groupby(['date', 'intent']).size().reset_index(name='intent_volume')
+        intent_counts['date'] = pd.to_datetime(intent_counts['date'])
+        
+        logger.info(f"Loaded {len(call_volume_df)} call volume records")
+        logger.info(f"Calculated {len(intent_counts)} call intent records")
+        
+        return call_volume_df, intent_counts'''
+
+# Replace the load_call_data method
+import re
+pattern = r'    def load_call_data\(self\).*?return call_volume_df, call_intents_df'
+content = re.sub(pattern, new_intent_method, content, flags=re.DOTALL)
+
+# Write back to file
+with open('src/data/data_loader.py', 'w') as f:
+    f.write(content)
+EOF
+
+    print_success "Call intents logic patched to count occurrences"
 }
 
 run_validation() {
-    print_info "Running validation checks..."
+    print_info "Running validation checks for your data format..."
     
     # Check if all files were patched correctly
     local errors=0
@@ -356,6 +429,17 @@ run_validation() {
     # Check config file
     if ! grep -q "mail_data:" config/config.yaml; then
         print_error "Config file patch failed"
+        ((errors++))
+    fi
+    
+    # Check if correct column names are in config
+    if ! grep -q "mail_date" config/config.yaml; then
+        print_error "Mail date column not updated in config"
+        ((errors++))
+    fi
+    
+    if ! grep -q "ConversationStart" config/config.yaml; then
+        print_error "Call intent date column not updated in config"
         ((errors++))
     fi
     
@@ -371,14 +455,8 @@ run_validation() {
         ((errors++))
     fi
     
-    # Check sample data
-    if [ ! -f "data/raw/sample_mail_data.csv" ]; then
-        print_error "Sample mail data not created"
-        ((errors++))
-    fi
-    
     if [ $errors -eq 0 ]; then
-        print_success "All patches applied successfully"
+        print_success "All patches applied successfully for your data format"
         return 0
     else
         print_error "$errors patch(es) failed"
@@ -396,20 +474,21 @@ display_completion_message() {
 ║                                                                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                              ║
-║  MAIL DATA CHANGES:                                                          ║
+║  UPDATES FOR YOUR DATA FORMAT:                                               ║
 ║                                                                              ║
-║  ✓ Configuration updated to use single mail file                            ║
+║  ✓ Configuration updated for your column names                              ║
 ║  ✓ Data loader modified for combined mail data                              ║
-║  ✓ Main script updated to handle new format                                 ║
+║  ✓ Call intents logic updated to count occurrences                          ║
+║  ✓ Main script updated to handle your format                                ║
 ║  ✓ Visualization functions patched                                           ║
-║  ✓ Sample data created in correct format                                     ║
+║  ✓ Sample data removed - ready for your real data                           ║
 ║                                                                              ║
-║  YOUR MAIL DATA FILE SHOULD NOW HAVE:                                       ║
-║  - date column (YYYY-MM-DD format)                                          ║
-║  - mail_type column (string categories)                                      ║
-║  - mail_volume column (integer volumes)                                      ║
+║  PLACE YOUR DATA FILES:                                                      ║
+║  📁 data/raw/mail.csv           (mail_date, mail_type, mail_volume)          ║
+║  📁 data/raw/call_intents.csv   (ConversationStart, uui_Intent)              ║
+║  📁 data/raw/call_volume.csv    (Date, call_volume)                          ║
 ║                                                                              ║
-║  Multiple rows per date are expected (one per mail type).                   ║
+║  🔍 The system will automatically count intent occurrences per date         ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -417,11 +496,14 @@ EOF
     echo -e "${NC}"
     
     print_info "Next steps:"
-    echo "1. Place your mail data file at: data/raw/mail_data.csv"
-    echo "2. Ensure it follows the format in: config/mail_data_format.yaml"
-    echo "3. Run the analysis: ./run_analysis.sh"
-    echo "4. Or test with sample data: ./quick_start.sh"
+    echo "1. Place your 3 data files in data/raw/ directory:"
+    echo "   - mail.csv (mail_date, mail_type, mail_volume)" 
+    echo "   - call_intents.csv (ConversationStart, uui_Intent)"
+    echo "   - call_volume.csv (Date, call_volume)"
+    echo "2. Run validation check: ./quick_start.sh"
+    echo "3. Run full analysis: ./run_analysis.sh"
     echo ""
+    echo -e "${YELLOW}Your data format guide is in: config/your_data_format.yaml${NC}"
     echo -e "${YELLOW}Backup files created with .backup extension if you need to revert${NC}"
 }
 
@@ -431,6 +513,7 @@ main() {
     check_project_structure
     patch_config_file
     patch_data_loader
+    patch_call_intents_logic
     patch_main_script
     patch_visualization
     create_sample_mail_data

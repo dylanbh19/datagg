@@ -1,0 +1,223 @@
+# ================================================================================
+# CUSTOMER COMMUNICATION ANALYTICS - MAIN CONFIGURATION FILE
+# ================================================================================
+# 
+# Instructions:
+# 1. Update file paths to point to your actual data files
+# 2. Modify column names to match your data structure
+# 3. Adjust analysis parameters as needed
+# 4. Configure economic indicators based on your requirements
+#
+# ================================================================================
+
+# Data file paths and column mappings
+data:
+  # Call volume data (with some missing values allowed)
+  call_volume:
+    file_path: "data/raw/call_volume.csv"
+    date_column: "date"              # Column containing dates (YYYY-MM-DD format)
+    volume_column: "call_volume"     # Column containing call volumes (integers)
+    
+  # Call intents data (complete dataset)
+  call_intents:
+    file_path: "data/raw/call_intents.csv"
+    date_column: "date"              # Column containing dates
+    intent_column: "intent"          # Column containing intent categories (strings)
+    volume_column: "intent_volume"   # Column containing volume per intent (integers)
+    
+  # Mail volume data (total mail sent per day)
+  mail_volume:
+    file_path: "data/raw/mail_volume.csv"
+    date_column: "date"              # Column containing dates
+    volume_column: "mail_volume"     # Column containing total mail volumes (integers)
+    
+  # Mail types data (volume by mail type per day)
+  mail_types:
+    file_path: "data/raw/mail_types.csv"
+    date_column: "date"              # Column containing dates
+    type_column: "mail_type"         # Column containing mail type categories (strings)
+    volume_column: "mail_volume"     # Column containing volume per type (integers)
+
+# Economic data configuration
+economic_data:
+  # List of economic indicators to fetch
+  # VIX = Volatility Index, SPY = S&P 500 ETF, DGS10 = 10-Year Treasury
+  # UNRATE = Unemployment Rate, UMCSENT = Consumer Sentiment, FEDFUNDS = Fed Funds Rate
+  indicators:
+    - "VIX"           # Market volatility (fear index)
+    - "SPY"           # S&P 500 performance
+    - "DGS10"         # 10-Year Treasury bond yield
+    - "UNRATE"        # Unemployment rate
+    - "UMCSENT"       # Consumer sentiment index
+    - "FEDFUNDS"      # Federal funds interest rate
+  
+  # Date range for economic data (should cover your analysis period)
+  start_date: "2022-01-01"
+  end_date: "2024-06-30"
+
+# Analysis parameters
+analysis:
+  # Time series analysis settings
+  max_lag_days: 14                 # Maximum lag days to test for mail-call correlations
+  seasonal_periods: [7, 30, 90, 365]  # Periods for seasonal analysis (weekly, monthly, quarterly, yearly)
+  
+  # Feature engineering settings
+  rolling_windows: [3, 7, 14, 30, 90]  # Rolling window sizes for moving averages
+  
+  # Model training parameters
+  test_size: 0.2                   # Proportion of data for testing (20%)
+  cv_folds: 5                      # Number of cross-validation folds
+  random_state: 42                 # Random seed for reproducibility
+  
+  # Outlier detection settings
+  outlier_methods: ["iqr", "zscore", "isolation_forest"]  # Methods for outlier detection
+  outlier_threshold: 3.0           # Z-score threshold for outlier detection
+  
+  # Feature selection
+  max_features: 50                 # Maximum number of features to use in models
+  feature_selection_method: "mutual_info"  # Method for feature selection
+
+# Visualization settings
+visualization:
+  # Plot aesthetics
+  figure_size: [12, 8]             # Default figure size [width, height]
+  dpi: 300                         # Resolution for saved plots
+  style: "seaborn-v0_8"           # Matplotlib style
+  color_palette: "husl"            # Color palette for plots
+  
+  # Font settings
+  font_size: 12                    # Base font size
+  title_size: 14                   # Title font size
+  
+  # Plot-specific settings
+  correlation_threshold: 0.3       # Minimum correlation to highlight in heatmaps
+  top_features_count: 10           # Number of top features to show in importance plots
+
+# Output settings
+output:
+  # Directory paths for outputs
+  plots_dir: "outputs/plots"       # Directory for saving plot PNG files
+  reports_dir: "outputs/reports"   # Directory for saving analysis reports
+  models_dir: "outputs/models"     # Directory for saving trained models
+  
+  # File naming
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for file naming
+  
+  # Report settings
+  generate_summary_report: true    # Whether to generate executive summary
+  save_model_objects: true         # Whether to save trained models to disk
+
+# Model-specific settings
+models:
+  # Random Forest parameters
+  random_forest:
+    n_estimators: 100
+    max_depth: null
+    min_samples_split: 2
+    min_samples_leaf: 1
+    random_state: 42
+    n_jobs: -1
+  
+  # XGBoost parameters  
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    n_jobs: -1
+  
+  # Linear regression parameters
+  linear_regression:
+    alpha: 1.0                     # Regularization strength for Ridge regression
+    fit_intercept: true
+    normalize: false
+  
+  # Prophet parameters
+  prophet:
+    daily_seasonality: true
+    weekly_seasonality: true
+    yearly_seasonality: true
+    changepoint_prior_scale: 0.05
+    seasonality_prior_scale: 10.0
+    interval_width: 0.8
+
+# Logging configuration
+logging:
+  level: "INFO"                    # Logging level (DEBUG, INFO, WARNING, ERROR)
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/analytics.log"       # Log file path
+  max_file_size: "10MB"           # Maximum log file size before rotation
+  backup_count: 5                  # Number of backup log files to keep
+
+# Data validation rules
+validation:
+  # Minimum data requirements
+  min_records_call_volume: 30      # Minimum number of call volume records required
+  min_records_mail_volume: 30      # Minimum number of mail volume records required
+  
+  # Data quality thresholds
+  max_missing_percentage: 0.5      # Maximum percentage of missing values allowed (50%)
+  min_correlation_threshold: 0.01  # Minimum correlation to consider for analysis
+  
+  # Date range validation
+  validate_date_ranges: true       # Whether to validate that all dates are within expected range
+  allow_future_dates: false        # Whether to allow dates in the future
+
+# Advanced analysis settings
+advanced:
+  # Granger causality testing
+  granger_causality:
+    enabled: true
+    max_lags: 10                   # Maximum lags to test for Granger causality
+    significance_level: 0.05       # Significance level for tests
+  
+  # Regime detection
+  regime_detection:
+    enabled: true
+    method: "markov_switching"     # Method for regime detection
+    min_regime_length: 10          # Minimum length of a regime in days
+  
+  # Anomaly detection
+  anomaly_detection:
+    enabled: true
+    methods: ["isolation_forest", "local_outlier_factor"]
+    contamination: 0.1             # Expected proportion of anomalies
+  
+  # Economic impact analysis
+  economic_analysis:
+    volatility_threshold: 20       # VIX threshold for high volatility periods
+    recession_indicators: ["UNRATE", "DGS10"]  # Indicators to use for recession detection
+
+# Performance settings
+performance:
+  # Parallel processing
+  n_jobs: -1                       # Number of parallel jobs (-1 uses all cores)
+  
+  # Memory management
+  chunk_size: 10000               # Chunk size for processing large datasets
+  low_memory_mode: false           # Whether to use low memory mode for large datasets
+  
+  # Caching
+  enable_caching: true             # Whether to enable result caching
+  cache_dir: "cache"               # Directory for cache files
+
+# Experimental features (use with caution)
+experimental:
+  # Advanced modeling techniques
+  ensemble_methods:
+    enabled: false
+    methods: ["voting", "stacking"] # Ensemble methods to try
+  
+  # Deep learning models
+  deep_learning:
+    enabled: false
+    model_types: ["lstm", "gru"]   # Deep learning model types
+    epochs: 50                     # Training epochs
+    batch_size: 32                 # Batch size for training
+  
+  # AutoML integration
+  automl:
+    enabled: false
+    time_budget: 300               # Time budget in seconds for AutoML

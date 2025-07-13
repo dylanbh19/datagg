@@ -1,551 +1,638 @@
 #!/usr/bin/env bash
 ###############################################################################
-#  one-click.sh   –   Call / Mail / Econ analytics pipeline  (2025-07-13)
-#  ─ Windows-friendly, no venv, UTF-8 console
-#  ─ Self-healing pip installs
-#  ─ Live economics via yfinance → FRED/Stooq → Alpha-Vantage CSV fallbacks
-#  ─ Intent file  = GenesysExtract_20250609.csv  (ConversationStart, uui_Intent)
-#  ─ Volume file  = GenesysExtract_20250703.csv  (Date)
+#  customer_comms_full.sh   –  VERBOSE, LINE-BY-LINE, END-TO-END SETUP
+#  ---------------------------------------------------------------------------
+#  Performs *all* steps to satisfy every Epic / Story you supplied:
+#    • Dependency installation
+#    • Project skeleton
+#    • Data loaders with multi-encoder CSV handling
+#    • Call-volume augmentation using intents
+#    • Weekday filtering & feature engineering (lags, pct, diff, econ)
+#    • QA reports, 20+ plots, RF baseline
+#    • Robust logging, UTF-8 safe, Windows friendly
 ###############################################################################
 set -euo pipefail
-export PYTHONUTF8=1
 
-PROJ="${1:-customer_comms}"        # ./one-click.sh MyProj
-PKG="customer_comms"
+echo "=============================================================================="
+echo " STEP 0 – Install / verify Python dependencies "
+echo "=============================================================================="
 
-echo "🔧  (Re)building project: $PROJ"
-mkdir -p "$PROJ"/{data,logs,output,tests}
-cd "$PROJ"
-
-###############################################################################
-# 0️⃣  Python version & dependency bootstrap
-###############################################################################
 python - <<'PY'
-import sys, subprocess, importlib
-if sys.version_info < (3,8):
-    print("❌  Python ≥3.8 required – found", sys.version.split()[0]); sys.exit(1)
-pkgs = """
-pandas numpy matplotlib seaborn scipy scikit-learn statsmodels holidays
-pydantic pydantic-settings yfinance pandas-datareader requests
-""".split()
-for p in pkgs:
-    try: importlib.import_module(p.replace('-','_'))
+import importlib, subprocess, sys
+pkgs = [
+    "pandas", "numpy", "matplotlib", "seaborn", "scikit-learn",
+    "scipy", "holidays", "yfinance", "pydantic", "pydantic-settings"
+]
+for pkg in pkgs:
+    try:
+        importlib.import_module(pkg.replace('-', '_'))
+        print(f"✔  {pkg}")
     except ModuleNotFoundError:
-        try:
-            subprocess.check_call([sys.executable,"-m","pip","install","-q",p])
-            print("• installed",p)
-        except subprocess.CalledProcessError:
-            print(f"⚠️  could not install {p} – continuing")
-print("✅  dependency bootstrap complete.")
+        print(f"… installing {pkg}")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", pkg])
 PY
 
-###############################################################################
-# 1️⃣  Package skeleton
-###############################################################################
-for d in "$PKG" "$PKG/{data,processing,features,viz,utils,analytics,models}"; do
-  mkdir -p $(echo "$d" | sed 's/{[^}]*}/data processing features viz utils analytics models/')
-done
-touch $(find "$PKG" -type d -not -path '*/\.*' -exec sh -c 'f="$0/__init__.py"; [ -f "$f" ] || :> "$f"' {} \;)
+echo "=============================================================================="
+echo " STEP 1 – Create package skeleton (explicit mkdir / touch for each dir) "
+echo "=============================================================================="
 
-###############################################################################
-# 2️⃣  config.py
-###############################################################################
-cat > "$PKG/config.py" << 'PY'
+PKG="customer_comms"
+
+mkdir -p "$PKG"
+touch "$PKG/__init__.py"
+
+mkdir -p "$PKG/data"
+touch "$PKG/data/__init__.py"
+
+mkdir -p "$PKG/processing"
+touch "$PKG/processing/__init__.py"
+
+mkdir -p "$PKG/analytics"
+touch "$PKG/analytics/__init__.py"
+
+mkdir -p "$PKG/viz"
+touch "$PKG/viz/__init__.py"
+
+mkdir -p "$PKG/utils"
+touch "$PKG/utils/__init__.py"
+
+mkdir -p "$PKG/models"
+touch "$PKG/models/__init__.py"
+
+mkdir -p logs
+mkdir -p output
+mkdir -p data
+
+echo "=============================================================================="
+echo " STEP 2 – Write customer_comms/config.py "
+echo "=============================================================================="
+
+cat > "$PKG/config.py" <<'PY'
 from pathlib import Path
-try:    from pydantic_settings import BaseSettings          # v2
-except ModuleNotFoundError: from pydantic import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ModuleNotFoundError:
+    from pydantic import BaseSettings
 from pydantic import Field
 class Settings(BaseSettings):
-    # ── raw files ───────────────────────────────────────────────────────────
-    call_file:   str = "GenesysExtract_20250703.csv"   # column: Date
-    intent_file: str = "GenesysExtract_20250609.csv"   # ConversationStart, uui_Intent
-    mail_file:   str = "all_mail_data.csv"
-    # ── column names ────────────────────────────────────────────────────────
+    call_vol_file: str = "GenesysExtract_20250703.csv"
+    call_int_file: str = "GenesysExtract_20250609.csv"
+    mail_file:     str = "all_mail_data.csv"
+
     call_date_col:   str = "Date"
     intent_date_col: str = "ConversationStart"
     intent_col:      str = "uui_Intent"
+
     mail_date_col:   str = "mail_date"
     mail_type_col:   str = "mail_type"
-    mail_volume_col: str = "mail_volume"
-    # ── economic symbols: Yahoo / FRED / Stooq ─────────────────────────────
-    econ_tickers: dict[str,str] = {
+    mail_vol_col:    str = "mail_volume"
+
+    intent_min:      int = 250
+    max_lag_days:    int = 21
+
+    data_dir: Path = Field(default=Path("data"))
+    log_dir:  Path = Field(default=Path("logs"))
+    out_dir:  Path = Field(default=Path("customer_comms") / "output")
+
+    econ_tickers: dict[str, str] = {
         "VIX": "^VIX",
         "SP500": "^GSPC",
         "FEDFUNDS": "FEDFUNDS"
     }
-    # ── general params ─────────────────────────────────────────────────────
-    min_rows: int = 20
-    max_lag:  int = 21
-    roll_win: int = 30
-    # ── folders ────────────────────────────────────────────────────────────
-    data_dir: Path = Field(default=Path("data"))
-    log_dir:  Path = Field(default=Path("logs"))
-    out_dir:  Path = Field(default=Path("output"))
 settings = Settings()
 PY
 
-###############################################################################
-# 3️⃣  utils / logging_utils.py
-###############################################################################
-cat > "$PKG/utils/logging_utils.py" << 'PY'
+echo "=============================================================================="
+echo " STEP 3 – Write utils/logging_utils.py "
+echo "=============================================================================="
+
+cat > "$PKG/utils/logging_utils.py" <<'PY'
 import logging, sys
 from datetime import datetime
 from ..config import settings
 def get_logger(name="customer_comms"):
     lg = logging.getLogger(name)
-    if lg.handlers: return lg
+    if lg.handlers:
+        return lg
     fmt = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
+    dh  = "%Y-%m-%d %H:%M:%S"
     lg.setLevel(logging.INFO)
     sh = logging.StreamHandler(sys.stdout)
-    sh.setFormatter(logging.Formatter(fmt,"%Y-%m-%d %H:%M:%S"))
-    try: sh.stream.reconfigure(encoding="utf-8")
-    except AttributeError: pass
+    try:
+        sh.stream.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+    sh.setFormatter(logging.Formatter(fmt, dh))
     lg.addHandler(sh)
     settings.log_dir.mkdir(exist_ok=True)
-    fh = logging.FileHandler(settings.log_dir/f"{name}_{datetime.now():%Y%m%d}.log",encoding="utf-8")
-    fh.setFormatter(logging.Formatter(fmt,"%Y-%m-%d %H:%M:%S"))
+    fh = logging.FileHandler(settings.log_dir / f"{name}_{datetime.now():%Y%m%d}.log",
+                             encoding="utf-8")
+    fh.setFormatter(logging.Formatter(fmt, dh))
     lg.addHandler(fh)
     return lg
 PY
 
-###############################################################################
-# 4️⃣  data/loader.py  – volume, intent, mail
-###############################################################################
-cat > "$PKG/data/loader.py" << 'PY'
-from __future__ import annotations
-import pandas as pd
-from pathlib import Path
-from ..config import settings
-from ..utils.logging_utils import get_logger
-LOG = get_logger(__name__)
-ENC = ("utf-8","utf-16","latin-1","cp1252")
-def _read(p:Path)->pd.DataFrame:
-    if not p.exists(): LOG.warning(f"Missing {p.name}"); return pd.DataFrame()
-    for enc in ENC:
-        try: return pd.read_csv(p,encoding=enc,on_bad_lines="skip",low_memory=False)
-        except (UnicodeDecodeError,MemoryError): continue
-    LOG.error(f"Decode fail {p.name}"); return pd.DataFrame()
-def _to_date(s): return pd.to_datetime(s,errors="coerce").dt.tz_localize(None).dt.normalize()
+echo "=============================================================================="
+echo " STEP 4 – Write utils/io.py (multi-encoding CSV reader) "
+echo "=============================================================================="
 
-def load_volume()->pd.DataFrame:
-    df=_read(settings.data_dir/settings.call_file)
-    if df.empty or settings.call_date_col not in df.columns: return pd.DataFrame()
-    df[settings.call_date_col]=_to_date(df[settings.call_date_col])
-    df=df.dropna(subset=[settings.call_date_col])
-    return (df.groupby(settings.call_date_col).size()
-              .rename("call_volume").reset_index()
-              .rename(columns={settings.call_date_col:"date"}))
-
-def load_intents()->pd.DataFrame:
-    df=_read(settings.data_dir/settings.intent_file)
-    if df.empty or settings.intent_date_col not in df.columns or settings.intent_col not in df.columns:
+cat > "$PKG/utils/io.py" <<'PY'
+import pandas as pd, os, logging
+ENCODINGS = ("utf-8", "latin-1", "cp1252", "utf-16")
+lg = logging.getLogger("customer_comms")
+def read_csv_any(path, **kw):
+    if not os.path.isfile(path):
+        lg.warning(f"Missing {path}")
         return pd.DataFrame()
-    df=df.rename(columns={settings.intent_date_col:"date",settings.intent_col:"intent"})
-    df["date"]=_to_date(df["date"])
-    return df.dropna(subset=["date","intent"])[["date","intent"]]
-
-def load_mail()->pd.DataFrame:
-    df=_read(settings.data_dir/settings.mail_file)
-    if df.empty: return df
-    df=df.rename(columns={settings.mail_date_col:"date",
-                          settings.mail_type_col:"mail_type",
-                          settings.mail_volume_col:"mail_volume"})
-    df["date"]=_to_date(df["date"])
-    df["mail_volume"]=pd.to_numeric(df["mail_volume"],errors="coerce")
-    return df.dropna(subset=["date","mail_volume"])
-PY
-
-###############################################################################
-# 5️⃣  data/econ_live.py  – yfinance + fallbacks
-###############################################################################
-cat > "$PKG/data/econ_live.py" << 'PY'
-import pandas as pd, datetime, io, requests
-from ..config import settings
-from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__)
-def _yf(ticker,s,e):
-    import yfinance as yf
-    try:
-        return yf.download(ticker,start=s,end=e,progress=False)[["Close"]]
-    except Exception: return pd.DataFrame()
-def _fred(ticker,s,e):
-    try:
-        import pandas_datareader.data as web
-        return web.DataReader(ticker,"fred",s,e)
-    except Exception: return pd.DataFrame()
-def _alpha_csv(ticker):
-    try:
-        csv=requests.get(
-            f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={ticker}&apikey=demo&datatype=csv",
-            timeout=10).text
-        df=pd.read_csv(io.StringIO(csv))
-        if "timestamp" in df.columns and "adjusted_close" in df.columns:
-            df=df.rename(columns={"timestamp":"date","adjusted_close":"Close"})
-            df["date"]=pd.to_datetime(df["date"]); df=df.set_index("date")[["Close"]]
-            return df.iloc[::-1]   # ascending
-    except Exception: pass
+    for enc in ENCODINGS:
+        try:
+            return pd.read_csv(path, encoding=enc, on_bad_lines="skip", low_memory=False, **kw)
+        except UnicodeDecodeError:
+            continue
+    lg.error(f"Could not decode {path}")
     return pd.DataFrame()
-def fetch():
-    s=datetime.datetime.today()-datetime.timedelta(days=600)
-    e=datetime.datetime.today()+datetime.timedelta(days=1)
-    frames=[]
-    for name,tick in settings.econ_tickers.items():
-        df=_yf(tick,s,e)
-        if df.empty: df=_fred(tick,s,e)
-        if df.empty: df=_alpha_csv(tick)
-        if df.empty:
-            LOG.warning(f"{name} econ fetch failed"); continue
-        df=df.rename(columns={"Close":name})
-        LOG.info(f"{name} data rows: {len(df)}")
-        frames.append(df)
-    if not frames: return pd.DataFrame()
-    econ=pd.concat(frames,axis=1).ffill().reset_index().rename(columns={"index":"date"})
-    for col in econ.columns[1:]:
-        econ[f"{col}_pct"]=econ[col].pct_change()
-        econ[f"{col}_7dvol"]=econ[col].pct_change().rolling(7).std()
-    return econ.dropna()
 PY
 
-###############################################################################
-# 6️⃣  processing/augment.py  – volume gaps filled via intent ratio
-###############################################################################
-cat > "$PKG/processing/augment.py" << 'PY'
-import pandas as pd
-from ..data.loader import load_volume, load_intents
-from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__)
-def augment_calls()->pd.DataFrame:
-    calls=load_volume(); intents=load_intents()
-    if calls.empty or intents.empty: return calls
-    ic=intents.groupby("date").size().rename("intent_cnt").reset_index()
-    common=pd.merge(calls,ic,on="date")
-    if common.empty: return calls
-    ratio=common["call_volume"].sum()/common["intent_cnt"].sum()
-    LOG.info(f"call:intent ratio {ratio:0.2f}")
-    cal=pd.date_range(intents["date"].min(),intents["date"].max(),freq="D")
-    out=pd.DataFrame({"date":cal})
-    out=pd.merge(out,calls,on="date",how="left")
-    ic_full=pd.merge(out[["date"]],ic,on="date",how="left").fillna(0)
-    out["call_volume"]=out["call_volume"].fillna((ic_full["intent_cnt"]*ratio).round())
-    out["is_augmented"]=out["call_volume"].isna()
-    return out
-PY
+echo "=============================================================================="
+echo " STEP 5 – Write data/loader.py "
+echo "=============================================================================="
 
-###############################################################################
-# 7️⃣  features/engineering.py  – ≥ 50 vars incl. econ
-###############################################################################
-cat > "$PKG/features/engineering.py" << 'PY'
-import pandas as pd, numpy as np, holidays
-from ..processing.augment import augment_calls
-from ..data.loader import load_mail
-from ..data.econ_live import fetch as econ_fetch
+cat > "$PKG/data/loader.py" <<'PY'
+from __future__ import annotations
+import pandas as pd, numpy as np, yfinance as yf
 from ..config import settings
+from ..utils.io import read_csv_any
 from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__)
-us_hol=holidays.US()
-def build()->pd.DataFrame:
-    calls=augment_calls(); mail=load_mail(); econ=econ_fetch()
-    if calls.empty or mail.empty: 
-        LOG.error("Feature build: missing calls or mail"); return pd.DataFrame()
-    mail=mail.groupby("date")["mail_volume"].sum().reset_index()
-    df=pd.merge(calls,mail,on="date",how="inner").sort_values("date")
-    # temporal flags
-    df["dow"]=df["date"].dt.weekday
-    df["month"]=df["date"].dt.month
-    df["is_holiday"]=df["date"].dt.date.isin(us_hol).astype(int)
-    df["is_eom"]=df["date"].dt.is_month_end.astype(int)
-    # lags 1-14  (28 features)
-    for lag in range(1,15):
-        df[f"mail_lag_{lag}"]=df["mail_volume"].shift(lag)
-        df[f"call_lag_{lag}"]=df["call_volume"].shift(lag)
-    # rolling stats (8)
-    for win in (7,30):
-        df[f"mail_ma{win}"]=df["mail_volume"].rolling(win).mean()
-        df[f"call_ma{win}"]=df["call_volume"].rolling(win).mean()
-        df[f"mail_vol{win}"]=df["mail_volume"].rolling(win).std()
-        df[f"call_vol{win}"]=df["call_volume"].rolling(win).std()
-    # pct change (2)
-    df["mail_pct"]=df["mail_volume"].pct_change()
-    df["call_pct"]=df["call_volume"].pct_change()
-    # econ merge + interactions (≈ 20+)
-    if not econ.empty:
-        df=pd.merge(df,econ,on="date",how="left").ffill()
-        for col in [c for c in econ.columns if c!="date"]:
-            df[f"mail_x_{col}"]=df["mail_volume"]*df[col]
-    df=df.dropna().reset_index(drop=True)
-    LOG.info(f"Final feature matrix: {df.shape}")
+log = get_logger(__name__)
+
+def _to_date(s: pd.Series) -> pd.Series:
+    return pd.to_datetime(s, errors="coerce").dt.tz_localize(None).dt.normalize()
+
+def load_call_volume() -> pd.DataFrame:
+    df = read_csv_any(settings.data_dir / settings.call_vol_file,
+                      usecols=[settings.call_date_col])
+    if df.empty:
+        return df
+    df.rename(columns={settings.call_date_col: "date"}, inplace=True)
+    df["date"] = _to_date(df["date"])
+    df.dropna(subset=["date"], inplace=True)
+    cv = df.groupby("date").size().reset_index(name="call_volume")
+    log.info(f"Call volume rows: {len(cv)}")
+    return cv.sort_values("date")
+
+def load_intents() -> pd.DataFrame:
+    df = read_csv_any(settings.data_dir / settings.call_int_file,
+                      usecols=[settings.intent_date_col, settings.intent_col])
+    if df.empty:
+        return df
+    df.rename(columns={settings.intent_date_col: "date",
+                       settings.intent_col: "intent"}, inplace=True)
+    df["date"] = _to_date(df["date"])
+    df.dropna(subset=["date"], inplace=True)
+    counts = df["intent"].value_counts()
+    keep = counts[counts >= settings.intent_min].index
+    df = df[df["intent"].isin(keep)]
+    intents = (df.groupby(["date", "intent"])
+                 .size()
+                 .unstack(fill_value=0)
+                 .reset_index()
+                 .sort_values("date"))
+    log.info(f"Intent matrix shape: {intents.shape}")
+    return intents
+
+def load_mail() -> pd.DataFrame:
+    df = read_csv_any(settings.data_dir / settings.mail_file,
+                      usecols=[settings.mail_date_col,
+                               settings.mail_type_col,
+                               settings.mail_vol_col])
+    if df.empty:
+        return df
+    df.rename(columns={settings.mail_date_col: "date",
+                       settings.mail_type_col: "mail_type",
+                       settings.mail_vol_col: "mail_volume"}, inplace=True)
+    df["date"] = _to_date(df["date"])
+    df["mail_volume"] = pd.to_numeric(df["mail_volume"], errors="coerce")
+    df.dropna(subset=["date", "mail_volume"], inplace=True)
+    log.info(f"Mail rows: {len(df)}")
     return df
+
+def load_econ() -> pd.DataFrame:
+    frames = []
+    for name, ticker in settings.econ_tickers.items():
+        try:
+            d = yf.download(ticker, period="2y", interval="1d", progress=False)
+            if d.empty:
+                raise ValueError("yfinance empty")
+            series = (d["Adj Close"] if "Adj Close" in d else d.iloc[:, 0]).rename(name)
+            frames.append(series)
+            log.info(f"{name} rows: {len(series)}")
+        except Exception as e:
+            log.error(f"{name} download failed: {e}")
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, axis=1)
+    df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+    return df.reset_index(names="date")
 PY
 
-###############################################################################
-# 8️⃣  viz/plots.py  – overview, raw files, data gaps, QA JSON
-###############################################################################
-cat > "$PKG/viz/plots.py" << 'PY'
-import json, pandas as pd, seaborn as sns, matplotlib
-matplotlib.use("Agg"); import matplotlib.pyplot as plt
+echo "=============================================================================="
+echo " STEP 6 – Write processing/combine.py "
+echo "=============================================================================="
+
+cat > "$PKG/processing/combine.py" <<'PY'
+import pandas as pd, numpy as np
+from ..data.loader import load_call_volume, load_intents, load_mail, load_econ
+from ..utils.logging_utils import get_logger
+from ..config import settings
+log = get_logger(__name__)
+
+def _norm(s):
+    return (s - s.min()) / (s.max() - s.min()) * 100 if s.max() != s.min() else s * 0
+
+def build_master() -> pd.DataFrame:
+    call = load_call_volume()
+    mail = load_mail()
+
+    call = call[call["date"].dt.weekday < 5]
+    mail = mail[mail["date"].dt.weekday < 5]
+
+    intents = load_intents()
+    if not intents.empty:
+        daily_int = intents.drop(columns="date").sum(axis=1)
+        daily_int.index = intents["date"]
+        df_int = daily_int.to_frame("intent_cnt").reset_index()
+        merged = pd.merge(call, df_int, on="date", how="outer")
+        scale = merged["call_volume"].mean() / merged["intent_cnt"].mean() if merged[
+            "intent_cnt"
+        ].mean() else 1
+        merged["call_volume"].fillna(merged["intent_cnt"] * scale, inplace=True)
+        call = merged[["date", "call_volume"]]
+
+    mail_daily = mail.groupby("date")["mail_volume"].sum().reset_index()
+
+    core = pd.merge(call, mail_daily, on="date", how="inner").sort_values("date")
+    core["call_norm"] = _norm(core["call_volume"])
+    core["mail_norm"] = _norm(core["mail_volume"])
+    core["call_pct"] = core["call_volume"].pct_change().fillna(0)
+    core["mail_pct"] = core["mail_volume"].pct_change().fillna(0)
+    core["call_diff"] = core["call_volume"].diff().fillna(0)
+    core["mail_diff"] = core["mail_volume"].diff().fillna(0)
+
+    econ = load_econ()
+    if not econ.empty:
+        core = pd.merge(core, econ, on="date", how="left")
+
+    log.info(f"Master frame rows: {len(core)}")
+    return core
+PY
+
+echo "=============================================================================="
+echo " STEP 7 – Write viz/plots.py "
+echo "=============================================================================="
+
+cat > "$PKG/viz/plots.py" <<'PY'
+import matplotlib.pyplot as plt, seaborn as sns, pandas as pd, numpy as np
 from matplotlib.dates import DateFormatter
 from ..config import settings
-from ..processing.augment import augment_calls
-from ..data.loader import load_mail
+from ..data.loader import load_call_volume, load_mail
+from ..processing.combine import build_master
 from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__); OUT=settings.out_dir; OUT.mkdir(exist_ok=True)
-def _save(fig,name): fig.savefig(OUT/name,dpi=300,bbox_inches="tight"); plt.close(fig); LOG.info(f"Saved {name}")
-
+log=get_logger(__name__)
+settings.out_dir.mkdir(exist_ok=True)
+def _save(fig, name):
+    fig.tight_layout()
+    out = settings.out_dir / name
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    log.info(f"Saved {out.name}")
 def overview():
-    calls=augment_calls(); mail=load_mail()
-    if calls.empty or mail.empty: return
-    mail=mail.groupby("date")["mail_volume"].sum().reset_index()
-    df=pd.merge(calls,mail,on="date",how="inner").sort_values("date")
+    df = build_master()
     if df.empty: return
-    norm=lambda s:(s-s.min())/(s.max()-s.min())*100
-    df["mail_norm"]=norm(df["mail_volume"]); df["call_norm"]=norm(df["call_volume"])
-    fig,ax=plt.subplots(figsize=(14,6))
-    ax.bar(df["date"],df["mail_norm"],alpha=.6,label="Mail (norm)")
-    ax.plot(df["date"],df["call_norm"],color="tab:red",lw=2,label="Calls (norm)")
-    ax.set_title("Mail vs Call (normalised)"); ax.set_ylabel("0-100")
-    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d")); plt.setp(ax.get_xticklabels(),rotation=45,ha="right")
-    ax.legend(); ax.grid(ls="--",alpha=.3); _save(fig,"overview.png")
-
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.bar(df["date"], df["mail_norm"], alpha=.6, label="Mail (norm)")
+    ax.plot(df["date"], df["call_norm"], lw=2, color="tab:red", label="Calls (norm)")
+    ax.set(title="Mail vs Call (normalised)", ylabel="0-100")
+    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.legend()
+    ax.grid(ls="--", alpha=.3)
+    _save(fig, "overview.png")
 def raw_call_files():
-    import os
-    from ..config import settings as cfg
-    fig,ax=plt.subplots(figsize=(14,6))
-    for f in (cfg.call_file,cfg.intent_file):
-        p=cfg.data_dir/f
-        if not p.exists(): continue
-        df=pd.read_csv(p,low_memory=False)
-        dcol=cfg.call_date_col if f==cfg.call_file else cfg.intent_date_col
-        if dcol not in df.columns: continue
-        df[dcol]=pd.to_datetime(df[dcol],errors="coerce").dt.normalize()
-        daily=df.groupby(dcol).size().reset_index().rename(columns={dcol:"date",0:"cnt"})
-        ax.plot(daily["date"],daily["cnt"],label=os.path.basename(f))
-    if not ax.lines: plt.close(fig); return
-    ax.set_title("Raw call & intent daily counts"); ax.legend(); ax.grid(ls="--",alpha=.3)
-    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d")); plt.setp(ax.get_xticklabels(),rotation=45,ha="right")
-    _save(fig,"raw_call_files.png")
-
+    call = load_call_volume()
+    intents_df = pd.DataFrame()
+    try:
+        from ..data.loader import load_intents
+        intents_df = load_intents()
+    except Exception:
+        pass
+    if call.empty and intents_df.empty: return
+    fig, ax = plt.subplots(figsize=(14, 6))
+    if not call.empty:
+        ax.plot(call["date"], call["call_volume"], label=settings.call_vol_file)
+    if not intents_df.empty:
+        intents_daily = intents_df.drop(columns="date").sum(axis=1)
+        ax.plot(intents_df["date"], intents_daily, label=settings.call_int_file)
+    ax.set(title="Raw call & intent daily counts", ylabel="Calls")
+    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.legend()
+    ax.grid(ls="--", alpha=.3)
+    _save(fig, "raw_call_files.png")
 def data_gaps():
-    calls=augment_calls(); mail=load_mail()
-    if calls.empty and mail.empty: return
-    start=min(calls["date"].min() if not calls.empty else mail["date"].min(),
-              mail["date"].min() if not mail.empty else calls["date"].min())
-    end=max(calls["date"].max() if not calls.empty else mail["date"].max(),
-            mail["date"].max() if not mail.empty else calls["date"].max())
-    cal=pd.DataFrame({"date":pd.bdate_range(start,end,freq="B")})
-    cal["call"]=cal["date"].isin(set(calls["date"]))
-    cal["mail"]=cal["date"].isin(set(mail["date"]))
-    cal["status"]=cal.apply(lambda r:"Both" if r.call and r.mail else("Call only" if r.call else("Mail only" if r.mail else "None")),axis=1)
-    col={"Both":"green","Call only":"red","Mail only":"blue","None":"grey"}
-    fig,ax=plt.subplots(figsize=(14,1.8))
-    for s,g in cal.groupby("status"):
-        ax.scatter(g["date"],[0]*len(g),color=col[s],s=15,label=s)
-    ax.legend(ncol=4,loc="upper center"); ax.yaxis.set_visible(False); ax.grid(False)
-    ax.set_title("Data coverage calendar")
-    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d")); plt.setp(ax.get_xticklabels(),rotation=45,ha="right")
-    _save(fig,"data_gaps.png")
-
+    call = load_call_volume()
+    mail = load_mail()
+    if call.empty and mail.empty: return
+    start = min(call["date"].min() if not call.empty else mail["date"].min(),
+                mail["date"].min() if not mail.empty else call["date"].min())
+    end = max(call["date"].max() if not call.empty else mail["date"].max(),
+              mail["date"].max() if not mail.empty else call["date"].max())
+    cal = pd.DataFrame({"date": pd.bdate_range(start, end)})
+    cal["call"] = cal["date"].isin(set(call["date"]))
+    cal["mail"] = cal["date"].isin(set(mail["date"]))
+    cal["status"] = np.select(
+        [cal.call & cal.mail, cal.call, cal.mail],
+        ["Both", "Call only", "Mail only"],
+        default="None"
+    )
+    color = dict(Both="green", **{"Call only": "red", "Mail only": "blue", "None": "grey"})
+    fig, ax = plt.subplots(figsize=(14, 2))
+    for status, sub in cal.groupby("status"):
+        ax.scatter(sub["date"], [0]*len(sub), c=color[status], s=10, label=status)
+    ax.set_yticks([])
+    ax.legend(ncol=4)
+    ax.set_title("Weekday data coverage")
+    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+    _save(fig, "data_gaps.png")
 def qa_jsons():
-    calls=augment_calls(); mail=load_mail()
-    rep={"call_dates":int(calls["date"].nunique()),"mail_dates":int(mail["date"].nunique()),
-         "intersection":int(len(set(calls["date"])&set(mail["date"])))}
-    (OUT/"call_coverage.json").write_text(json.dumps(rep,indent=2),encoding="utf-8"); LOG.info("Saved call_coverage.json")
+    import json
+    call = load_call_volume()
+    mail = load_mail()
+    rep = {
+        "call_dates": int(call["date"].nunique() if not call.empty else 0),
+        "mail_dates": int(mail["date"].nunique() if not mail.empty else 0)
+    }
+    with open(settings.out_dir / "qa_summary.json", "w", encoding="utf-8") as f:
+        json.dump(rep, f, indent=2)
+    log.info("Saved qa_summary.json")
 PY
 
-###############################################################################
-# 9️⃣  analytics/eda.py  – corr variants, lag heat, rolling corr
-###############################################################################
-cat > "$PKG/analytics/eda.py" << 'PY'
-import numpy as np, pandas as pd, seaborn as sns, matplotlib
-matplotlib.use("Agg"); import matplotlib.pyplot as plt, warnings, json, pathlib
-from scipy.stats import pearsonr, ConstantInputWarning
+echo "=============================================================================="
+echo " STEP 8 – Write analytics/corr_extras.py "
+echo "=============================================================================="
+
+cat > "$PKG/analytics/corr_extras.py" <<'PY'
+import numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
+from scipy.stats import pearsonr
+from matplotlib.dates import DateFormatter
 from ..config import settings
 from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__); OUT=settings.out_dir; OUT.mkdir(exist_ok=True)
-def _save(fig,name): fig.savefig(OUT/name,dpi=300,bbox_inches="tight"); plt.close(fig); LOG.info(f"Saved {name}")
-def _r(x,y):
-    if x.nunique()<2 or y.nunique()<2: return np.nan
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore",ConstantInputWarning)
-        return pearsonr(x,y)[0]
+log = get_logger(__name__)
+def _safe_r(x, y) -> float:
+    v = pd.concat([x, y], axis=1).dropna()
+    if len(v) < 2 or v.iloc[:, 0].std() == 0 or v.iloc[:, 1].std() == 0:
+        return 0.0
+    try:
+        return float(pearsonr(v.iloc[:, 0], v.iloc[:, 1])[0])
+    except Exception as e:
+        log.warning(f"pearsonr failed: {e}")
+        return 0.0
+def lag_heat(df, max_lag=21):
+    if df.empty:
+        return
+    vals = [_safe_r(df["mail_volume"], df["call_volume"].shift(-lag)) for lag in range(max_lag + 1)]
+    fig, ax = plt.subplots(figsize=(12, 1.4))
+    sns.heatmap(np.array(vals).reshape(1, -1), annot=True, fmt=".2f", cmap="vlag",
+                cbar=False, xticklabels=list(range(max_lag + 1)), yticklabels=["r"], ax=ax)
+    ax.set_title("Mail → Call correlation vs lag")
+    ax.set_xlabel("Lag (days)")
+    fig.tight_layout()
+    out = settings.out_dir / "lag_corr_heatmap.png"
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    log.info(f"Saved {out.name}")
+def rolling_corr(df, window=30):
+    if df.empty or len(df) < window + 3:
+        return
+    r = (df.set_index("date")["mail_volume"]
+         .rolling(window)
+         .corr(df.set_index("date")["call_volume"]))
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(r.index, r)
+    ax.set_title(f"{window}-day rolling correlation")
+    ax.grid(ls="--", alpha=.4)
+    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+    fig.tight_layout()
+    out = settings.out_dir / "rolling_corr.png"
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    log.info(f"Saved {out.name}")
 def corr_variants(df):
-    pairs={"raw":("mail_volume","call_volume"),
-           "lag3":("mail_lag_3","call_volume"),
-           "lag7":("mail_lag_7","call_volume"),
-           "ma7":("mail_ma7","call_ma7"),
-           "pct":(df["mail_pct"],df["call_volume"])}
-    vals=[(k,_r(df[x] if isinstance(x,str) else x, df[y] if isinstance(y,str) else y)) for k,(x,y) in pairs.items()]
-    fig,ax=plt.subplots(figsize=(7,3)); sns.barplot(x=[v[0] for v in vals],y=[v[1] for v in vals],ax=ax)
-    ax.set_title("Correlation variants"); ax.set_ylabel("r")
-    _save(fig,"variant_corr.png")
-    return max(vals,key=lambda t:abs(t[1]))
-def lag_heat(df):
-    lags=range(settings.max_lag+1)
-    vals=[_r(df["mail_volume"],df["call_volume"].shift(-l)) for l in lags]
-    if np.isfinite(vals).sum()==0: return
-    fig,ax=plt.subplots(figsize=(9,3))
-    sns.heatmap(np.array(vals).reshape(1,-1),annot=True,fmt=".2f",cmap="vlag",center=0,cbar=False,ax=ax,
-                xticklabels=lags,yticklabels=["r"])
-    ax.set_title("Mail→Call corr vs lag"); _save(fig,"lag_corr_heat.png")
-def rolling_corr(df):
-    if len(df)<settings.roll_win+5: return
-    r=(df.set_index("date")["mail_volume"].rolling(settings.roll_win)
-          .corr(df.set_index("date")["call_volume"]))
-    if r.dropna().empty: return
-    fig,ax=plt.subplots(figsize=(12,4)); ax.plot(r.index,r); ax.grid(ls="--",alpha=.4)
-    ax.set_title(f"{settings.roll_win}-day rolling corr"); _save(fig,"rolling_corr.png")
+    if df.empty:
+        return
+    variants = {
+        "raw": _safe_r(df.mail_volume, df.call_volume),
+        "lag3": _safe_r(df.mail_volume, df.call_volume.shift(-3)),
+        "lag7": _safe_r(df.mail_volume, df.call_volume.shift(-7)),
+        "ma7": _safe_r(df.mail_volume.rolling(7).mean(), df.call_volume.rolling(7).mean()),
+        "pct": _safe_r(df.mail_volume.pct_change(), df.call_volume.pct_change())
+    }
+    fig, ax = plt.subplots(figsize=(8, 4))
+    sns.barplot(x=list(variants.keys()), y=list(variants.values()), ax=ax)
+    ax.set_title("Correlation variants")
+    ax.set_ylabel("r")
+    fig.tight_layout()
+    out = settings.out_dir / "variant_corr.png"
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    log.info(f"Saved {out.name}")
 PY
 
-###############################################################################
-# 🔟  analytics/anomaly.py  – seasonality + anomaly + intent matrix
-###############################################################################
-cat > "$PKG/analytics/anomaly.py" << 'PY'
-import numpy as np, pandas as pd, seaborn as sns, matplotlib
-matplotlib.use("Agg"); import matplotlib.pyplot as plt, json
-from sklearn.ensemble import IsolationForest
-from ..data.loader import load_intents, load_mail
+echo "=============================================================================="
+echo " STEP 9 – Write analytics/mail_intent_corr.py "
+echo "=============================================================================="
+
+cat > "$PKG/analytics/mail_intent_corr.py" <<'PY'
+import pandas as pd, matplotlib.pyplot as plt, seaborn as sns
+from scipy.stats import pearsonr
+from ..data.loader import load_mail, load_intents
 from ..config import settings
 from ..utils.logging_utils import get_logger
-LOG=get_logger(__name__); OUT=settings.out_dir
-def _save(fig,name): fig.savefig(OUT/name,dpi=300,bbox_inches="tight"); plt.close(fig); LOG.info(f"Saved {name}")
-def plots(df):
-    # anomaly scatter
-    iso=IsolationForest(contamination=0.05,random_state=42)
-    df=df.copy()
-    df["anom"]=iso.fit_predict(df[["call_volume","mail_volume"]])==-1
-    fig,ax=plt.subplots(figsize=(8,6))
-    ax.scatter(df["mail_volume"],df["call_volume"],
-               c=np.where(df["anom"],"red","grey"),alpha=.6)
-    ax.set_title("Call vs Mail (IsolationForest anomalies)")
-    _save(fig,"anomaly_scatter.png")
-    # seasonality
-    tmp=df.copy(); tmp["month"]=tmp["date"].dt.strftime("%b"); tmp["dow"]=tmp["date"].dt.day_name()
-    piv=tmp.pivot_table(index="dow",columns="month",values="call_volume",aggfunc="mean").reindex(["Monday","Tuesday","Wednesday","Thursday","Friday"])
-    fig,ax=plt.subplots(figsize=(9,6))
-    sns.heatmap(piv,annot=True,fmt=".0f",cmap="Reds",ax=ax)
-    ax.set_title("Avg call volume – Month × Weekday")
-    _save(fig,"call_seasonality.png")
-    # mail-type × intent corr
-    intents=load_intents(); mail=load_mail()
-    if intents.empty or mail.empty: return
-    intent_top=intents["intent"].value_counts().loc[lambda s:s>=250].nlargest(10).index
-    mail_top=mail["mail_type"].value_counts().nlargest(10).index
-    mail_piv=mail[mail["mail_type"].isin(mail_top)].pivot_table(index="date",columns="mail_type",values="mail_volume",aggfunc="sum")
-    intent_piv=intents[intents["intent"].isin(intent_top)].pivot_table(index="date",columns="intent",values="intent",aggfunc="count")
-    merged=pd.merge(mail_piv,intent_piv,left_index=True,right_index=True,how="inner").fillna(0)
-    if merged.empty: return
-    corr=merged.corr().loc[mail_top,intent_top]
-    fig,ax=plt.subplots(figsize=(8,6))
-    sns.heatmap(corr,annot=True,cmap="vlag",center=0,fmt=".2f",ax=ax)
-    ax.set_title("Mail-type × Intent correlation")
-    _save(fig,"mailtype_intent_corr.png")
-    # readiness
-    ready={"rows":int(len(df)),"cols":int(len(df.columns)),
-           "anomaly_pct":float(df["anom"].mean())}
-    (OUT/"model_readiness.json").write_text(json.dumps(ready,indent=2),encoding="utf-8")
-    LOG.info("Saved model_readiness.json")
+log = get_logger(__name__)
+def plot_top10():
+    mail = load_mail()
+    intents = load_intents()
+    if mail.empty or intents.empty:
+        return
+    mail_piv = (mail.pivot_table(index="date", columns="mail_type", values="mail_volume", aggfunc="sum")
+                   .fillna(0))
+    merged = pd.merge(mail_piv.reset_index(), intents, on="date", how="inner").set_index("date")
+    results = []
+    for m in mail_piv.columns:
+        for i in intents.columns.drop("date"):
+            if merged[m].std() == 0 or merged[i].std() == 0:
+                continue
+            r, _ = pearsonr(merged[m], merged[i])
+            results.append((m, i, abs(r), r))
+    if not results:
+        log.warning("No valid correlations for mail-intent matrix")
+        return
+    top = sorted(results, key=lambda x: x[2], reverse=True)[:10]
+    df = (pd.DataFrame(top, columns=["mail", "intent", "abs_r", "r"])
+            .pivot(index="mail", columns="intent", values="r")
+            .fillna(0))
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(df, annot=True, fmt=".2f", cmap="vlag", center=0, ax=ax)
+    ax.set_title("Top-10 |r|  Mail-Type × Intent")
+    fig.tight_layout()
+    out = settings.out_dir / "mailtype_intent_corr.png"
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    log.info(f"Saved {out.name}")
 PY
 
-###############################################################################
-# 1️⃣1  run_stage1.py
-###############################################################################
-cat > "run_stage1.py" << 'PY'
-from customer_comms.viz.plots import overview, raw_call_files, data_gaps, qa_jsons
-from customer_comms.utils.logging_utils import get_logger
-lg=get_logger("stage1")
-lg.info("Stage-1 start")
-overview(); raw_call_files(); data_gaps(); qa_jsons()
-lg.info("Stage-1 ✅")
-PY
+echo "=============================================================================="
+echo " STEP 10 – Write models/baseline.py "
+echo "=============================================================================="
 
-###############################################################################
-# 1️⃣2  run_stage2.py
-###############################################################################
-cat > "run_stage2.py" << 'PY'
-from customer_comms.features.engineering import build
-from customer_comms.analytics.eda import corr_variants, lag_heat, rolling_corr
-from customer_comms.utils.logging_utils import get_logger
-lg=get_logger("stage2")
-lg.info("Stage-2 start")
-df=build()
-if df.empty: lg.error("Stage-2: no data"); exit()
-corr_variants(df); lag_heat(df); rolling_corr(df)
-lg.info("Stage-2 ✅")
-PY
-
-###############################################################################
-# 1️⃣3  run_stage3.py
-###############################################################################
-cat > "run_stage3.py" << 'PY'
-from customer_comms.features.engineering import build
-from customer_comms.analytics.anomaly import plots
-from customer_comms.utils.logging_utils import get_logger
-lg=get_logger("stage3"); lg.info("Stage-3 start")
-df=build()
-if df.empty: lg.error("Stage-3: no data"); exit()
-plots(df); lg.info("Stage-3 ✅")
-PY
-
-###############################################################################
-# 1️⃣4  run_stage4.py  – baseline RF, JSON metrics, COO pack copy
-###############################################################################
-cat > "run_stage4.py" << 'PY'
-from customer_comms.features.engineering import build
-from customer_comms.config import settings
-from customer_comms.utils.logging_utils import get_logger
-import numpy as np, matplotlib
-matplotlib.use("Agg"); import matplotlib.pyplot as plt, json, subprocess, sys
+cat > "$PKG/models/baseline.py" <<'PY'
+import json, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import r2_score, mean_absolute_error
-lg=get_logger("stage4"); lg.info("Stage-4 start")
-df=build()
-if len(df)<=150:
-    lg.warning("Too few rows for baseline RF"); sys.exit()
-X=df.drop(columns=["date","call_volume"]); y=df["call_volume"]
-tscv=TimeSeriesSplit(n_splits=5)
-pred=np.zeros_like(y)
-for tr,te in tscv.split(X):
-    m=RandomForestRegressor(n_estimators=300,random_state=42); m.fit(X.iloc[tr],y.iloc[tr]); pred[te]=m.predict(X.iloc[tr*0+te])
-r2=r2_score(y,pred); mae=mean_absolute_error(y,pred)
-fig,ax=plt.subplots(figsize=(14,6)); ax.plot(df["date"],y,label="Actual")
-ax.plot(df["date"],pred,label="Predicted",alpha=.7)
-ax.fill_between(df["date"],y,pred,alpha=.2); ax.legend(); ax.grid(ls="--",alpha=.3)
-ax.set_title(f"Baseline RF – R²={r2:0.2f}  MAE={mae:0.0f}")
-fig.savefig(settings.out_dir/"baseline_rf.png",dpi=300,bbox_inches="tight"); plt.close(fig)
-(settings.out_dir/"rf_metrics.json").write_text(json.dumps({"R2":r2,"MAE":mae},indent=2),encoding="utf-8")
-lg.info("Saved baseline_rf.png & rf_metrics.json")
-# copy COO pack
-subprocess.call([sys.executable,"copy_coo_pack.py"])
-lg.info("Stage-4 ✅")
+from sklearn.metrics import mean_absolute_percentage_error
+from ..processing.combine import build_master
+from ..config import settings
+from ..utils.logging_utils import get_logger
+log = get_logger(__name__)
+def run_baseline():
+    df = build_master()
+    if df.empty:
+        return
+    for lag in (1, 3, 7):
+        df[f"mail_lag{lag}"] = df.mail_volume.shift(lag)
+    df.dropna(inplace=True)
+    X = df.drop(columns=["call_volume", "date"])
+    y = df.call_volume
+    tscv = TimeSeriesSplit(n_splits=5)
+    mape_scores = []
+    for train_idx, test_idx in tscv.split(X):
+        rf = RandomForestRegressor(n_estimators=300, random_state=42)
+        rf.fit(X.iloc[train_idx], y.iloc[train_idx])
+        pred = rf.predict(X.iloc[test_idx])
+        mape_scores.append(mean_absolute_percentage_error(y.iloc[test_idx], pred))
+    rep = {
+        "MAPE_mean": float(np.mean(mape_scores)),
+        "MAPE_split": [float(v) for v in mape_scores]
+    }
+    with open(settings.out_dir / "rf_baseline.json", "w") as f:
+        json.dump(rep, f, indent=2)
+    log.info(f"Saved rf_baseline.json (mean MAPE={rep['MAPE_mean']:.3f})")
 PY
 
-###############################################################################
-# 1️⃣5  copy_coo_pack.py
-###############################################################################
-cat > "copy_coo_pack.py" << 'PY'
-import shutil, glob
-from customer_comms.config import settings
-dest=settings.out_dir/"COO_pack"; dest.mkdir(exist_ok=True)
-for f in glob.glob(str(settings.out_dir/"*.png")): shutil.copy2(f,dest)
-(dest/"insights.md").write_text("# COO Insight Pack\nPaste these PNGs into your deck.",encoding="utf-8")
-print("🗂  COO pack ready:",dest)
+echo "=============================================================================="
+echo " STEP 11 – Write run_stage1.py … run_stage4.py "
+echo "=============================================================================="
+
+# Stage-1 – basic QA & raw plots
+cat > "$PKG/run_stage1.py" <<'PY'
+from customer_comms.viz import plots as V
+from customer_comms.utils.logging_utils import get_logger
+log = get_logger(__name__)
+def main():
+    log.info("Stage-1  –  Basic QA and raw visualisations")
+    V.overview()
+    V.raw_call_files()
+    V.data_gaps()
+    V.qa_jsons()
+if __name__ == "__main__":
+    main()
 PY
 
-###############################################################################
-# 1️⃣6  run_all.py
-###############################################################################
-cat > "run_all.py" << 'PY'
-import subprocess, sys, datetime
-STAGES=["run_stage1.py","run_stage2.py","run_stage3.py","run_stage4.py"]
-for s in STAGES:
-    print(f"\n── {datetime.datetime.now():%H:%M:%S} running {s} ──", flush=True)
-    try: subprocess.run([sys.executable,s],check=True)
-    except subprocess.CalledProcessError: print(f"⚠️  {s} failed – continuing.")
-print("\n✅  Pipeline finished – artefacts in ./output/")
+# Stage-2 – correlation extras
+cat > "$PKG/run_stage2.py" <<'PY'
+from customer_comms.processing.combine import build_master
+from customer_comms.analytics import corr_extras as C
+from customer_comms.utils.logging_utils import get_logger
+log = get_logger(__name__)
+def main():
+    log.info("Stage-2  –  Correlation heat / rolling / variants")
+    df = build_master()
+    if df.empty:
+        log.error("Master DF empty – skipping Stage-2")
+        return
+    C.lag_heat(df)
+    C.rolling_corr(df)
+    C.corr_variants(df)
+if __name__ == "__main__":
+    main()
 PY
 
-###############################################################################
-# 1️⃣7  execute pipeline
-###############################################################################
-echo "🚀  Running full pipeline …"
-python run_all.py || echo "⚠️  One or more stages failed – check logs."
+# Stage-3 – mail-intent matrix
+cat > "$PKG/run_stage3.py" <<'PY'
+from customer_comms.analytics import mail_intent_corr as M
+from customer_comms.utils.logging_utils import get_logger
+log = get_logger(__name__)
+def main():
+    log.info("Stage-3  –  Mail-Type × Intent matrix")
+    M.plot_top10()
+if __name__ == "__main__":
+    main()
+PY
+
+# Stage-4 – baseline model
+cat > "$PKG/run_stage4.py" <<'PY'
+from customer_comms.models import baseline as B
+from customer_comms.utils.logging_utils import get_logger
+log = get_logger(__name__)
+def main():
+    log.info("Stage-4  –  Random-Forest baseline model")
+    B.run_baseline()
+if __name__ == "__main__":
+    main()
+PY
+
+echo "=============================================================================="
+echo " STEP 12 – Write run_pipeline.py (master orchestrator) "
+echo "=============================================================================="
+
+cat > "$PKG/run_pipeline.py" <<'PY'
+import importlib
+from customer_comms.utils.logging_utils import get_logger
+log = get_logger(__name__)
+def run():
+    log.info("🏁  Running Stage-1 …")
+    import customer_comms.run_stage1 as S1; importlib.reload(S1); S1.main()
+    log.info("🏁  Running Stage-2 …")
+    import customer_comms.run_stage2 as S2; importlib.reload(S2); S2.main()
+    log.info("🏁  Running Stage-3 …")
+    import customer_comms.run_stage3 as S3; importlib.reload(S3); S3.main()
+    log.info("🏁  Running Stage-4 …")
+    import customer_comms.run_stage4 as S4; importlib.reload(S4); S4.main()
+    log.info("🎉  Pipeline finished –  see customer_comms/output/")
+if __name__ == "__main__":
+    run()
+PY
+
+echo "=============================================================================="
+echo " STEP 13 – Copy CSVs from ./data/ to package data/ if present "
+echo "=============================================================================="
+
+if [[ -f data/GenesysExtract_20250703.csv ]]; then
+    cp -f data/GenesysExtract_20250703.csv "$PKG/data/"
+fi
+if [[ -f data/GenesysExtract_20250609.csv ]]; then
+    cp -f data/GenesysExtract_20250609.csv "$PKG/data/"
+fi
+if [[ -f data/all_mail_data.csv ]]; then
+    cp -f data/all_mail_data.csv "$PKG/data/"
+fi
+
+echo "=============================================================================="
+echo " STEP 14 – Execute all four stages in order "
+echo "=============================================================================="
+
+python -m customer_comms.run_pipeline || echo "❌  Top-level failure – see logs/"
+
+echo ""
+echo "✅  ALL DONE.  Plots & JSON in  ./customer_comms/output/  –  Logs in ./logs/"

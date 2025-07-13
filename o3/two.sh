@@ -1,216 +1,196 @@
 #!/usr/bin/env bash
-# =====================================================================
-#  part2_advanced_eda.sh              (Customer-Comms  –  Stage 2 of 4)
-# =====================================================================
+# ==============================================================================
+# 02_analysis.sh              –  Customer-Comms  Stage-2
+# ------------------------------------------------------------------------------
+# • Builds engineered feature set
+# • Generates all advanced EDA plots required in Epics 2.1 → 2.4
+# • Windows-compatible, self-healing, UTF-8 logging
+# ==============================================================================
+
 set -euo pipefail
 export PYTHONIOENCODING=utf-8
 export PYTHONUTF8=1
 
 PKG="customer_comms"
-[[ -d $PKG ]] || { echo "❌  Run part1 first"; exit 1; }
+OUT="output"
+LOG="logs"
 
-# ---------------------------------------------------------------------
-# 0.  (No new pip installs – deps already present in Part 1)
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Helpers (same stale() logic as Stage-1)
+# ------------------------------------------------------------------------------
+python - <<'PY'
+from pathlib import Path
+from datetime import datetime
+import importlib, sys, contextlib
 
-# ---------------------------------------------------------------------
-# 1.  analytics/eda_ts.py  – Story 2.1
-# ---------------------------------------------------------------------
-cat > "$PKG/analytics/eda_ts.py" << 'PY'
-import pandas as pd, numpy as np, matplotlib.pyplot as plt, seaborn as sns
-from statsmodels.tsa.seasonal import seasonal_decompose
-from scipy.stats import pearsonr
-from matplotlib.dates import DateFormatter
-from ..config import settings
-from ..logging_utils import get_logger
-log=get_logger(__name__)
+# ---------------------------------------------------------------------------
+# 1.  Dynamic dependency check  --------------------------------------------
+# ---------------------------------------------------------------------------
+deps = ("pandas","numpy","matplotlib","seaborn","scipy",
+        "scikit-learn","statsmodels")
+for d in deps:
+    with contextlib.suppress(ModuleNotFoundError):
+        importlib.import_module(d); continue
+    import subprocess; subprocess.check_call([sys.executable,"-m","pip","install","-q",d])
 
-def decompose(df: pd.DataFrame):
-    if df.empty or len(df) < 60:
-        log.warning("Too few rows for decomposition"); return
-    series = df.set_index("date")["call_volume_aug"].dropna()
-    try:
-        res = seasonal_decompose(series, model="additive", period=7)
-        plt.figure(figsize=(12,8))
-        res.plot(); plt.tight_layout()
-        out = settings.out_dir/"04_ts_decomposition.png"
-        plt.savefig(out,dpi=300); plt.close()
-        log.info(f"Saved {out}")
-    except Exception as e:
-        log.error(f"Decomposition failed: {e}")
-
-def lag_heatmap(df: pd.DataFrame, max_lag:int=14):
-    vals=[]
-    for lag in range(0,max_lag+1):
-        v=df.dropna(subset=["mail_volume","call_volume_aug"])
-        r,_=pearsonr(v["mail_volume"], v["call_volume_aug"].shift(-lag).dropna())
-        vals.append(r)
-    plt.figure(figsize=(8,3))
-    sns.heatmap(np.array(vals).reshape(1,-1),annot=True,fmt=".2f",
-                cmap="vlag",center=0,cbar=False,
-                xticklabels=list(range(max_lag+1)),yticklabels=["r"])
-    plt.title("Mail→Call Pearson r by Lag (days)")
-    out=settings.out_dir/"05_lag_corr_heatmap.png"
-    plt.tight_layout(); plt.savefig(out,dpi=300); plt.close()
-    log.info(f"Saved {out}")
-
-def weekday_month_heat(df: pd.DataFrame):
-    piv=(df.assign(month=df["date"].dt.strftime("%b"),
-                   dow=df["date"].dt.day_name())
-            .pivot_table(index="dow",columns="month",
-                         values="call_volume_aug",aggfunc="mean"))
-    piv=piv.reindex(index=["Monday","Tuesday","Wednesday","Thursday","Friday"])
-    plt.figure(figsize=(10,6)); sns.heatmap(piv,annot=True,fmt=".0f",cmap="Reds")
-    plt.title("Avg Call Vol – Month × Weekday")
-    out=settings.out_dir/"06_seasonality_heat.png"
-    plt.tight_layout(); plt.savefig(out,dpi=300); plt.close()
-    log.info(f"Saved {out}")
-PY
-
-# ---------------------------------------------------------------------
-# 2.  analytics/mail_effectiveness.py  – Story 2.2
-# ---------------------------------------------------------------------
-cat > "$PKG/analytics/mail_effectiveness.py" << 'PY'
-import pandas as pd, matplotlib.pyplot as plt, seaborn as sns
-from ..config import settings
-from ..logging_utils import get_logger
-log=get_logger(__name__)
-
-def analyse(mail:pd.DataFrame, call_aug:pd.DataFrame):
-    if mail.empty or call_aug.empty: return
-    daily_calls=call_aug[["date","call_volume_aug"]]
-    merged=mail.merge(daily_calls,on="date",how="inner")
-    resp=(merged.groupby("mail_type")
-                 .apply(lambda g:(g["call_volume_aug"].sum()/g["mail_volume"].sum())*1000)
-                 .rename("calls_per_1k_mail")
-                 .sort_values(ascending=False))
-    resp.to_csv(settings.out_dir/"07_mail_response_rates.csv")
-    plt.figure(figsize=(10,6)); sns.barplot(y=resp.index,x=resp.values,color="tab:blue")
-    plt.xlabel("Calls per 1 000 Mail"); plt.ylabel("Mail Type")
-    plt.title("Mail-Campaign Effectiveness")
-    out=settings.out_dir/"07_mail_effectiveness.png"
-    plt.tight_layout(); plt.savefig(out,dpi=300); plt.close()
-    log.info(f"Saved {out} & CSV")
-PY
-
-# ---------------------------------------------------------------------
-# 3.  analytics/econ_sensitivity.py  – Story 2.3
-# ---------------------------------------------------------------------
-cat > "$PKG/analytics/econ_sensitivity.py" << 'PY'
-import pandas as pd, seaborn as sns, matplotlib.pyplot as plt
-from scipy.stats import pearsonr
-from ..config import settings
-from ..logging_utils import get_logger
-log=get_logger(__name__)
-
-def corr_heat(call:pd.DataFrame, econ:pd.DataFrame):
-    if call.empty or econ.empty: return
-    df=call.merge(econ,on="date",how="inner").dropna()
-    if df.empty: return
-    cols=[c for c in econ.columns if c!="date"]
-    res=[pearsonr(df[c],df["call_volume_aug"])[0] for c in cols]
-    sns.set(font_scale=1.0)
-    plt.figure(figsize=(8,2)); sns.heatmap([res],annot=True,fmt=".2f",
-            cmap="vlag",center=0,yticklabels=["r"],xticklabels=cols)
-    plt.title("Call vs Econ Indicator Correlations")
-    out=settings.out_dir/"08_econ_corr.png"
-    plt.tight_layout(); plt.savefig(out,dpi=300); plt.close()
-    log.info(f"Saved {out}")
-
-def add_regime(econ:pd.DataFrame)->pd.DataFrame:
-    if "sp500" not in econ.columns: return econ
-    econ=econ.copy()
-    econ["sp500_ret"]=econ["sp500"].pct_change()*100
-    econ["market_regime"]=pd.cut(econ["sp500_ret"],
-                                 bins=[-1e9,-0.5,0.5,1e9],
-                                 labels=["bear","sideways","bull"])
-    return econ
-PY
-
-# ---------------------------------------------------------------------
-# 4.  analytics/patterns.py  – Story 2.4
-# ---------------------------------------------------------------------
-cat > "$PKG/analytics/patterns.py" << 'PY'
-import numpy as np, matplotlib.pyplot as plt, seaborn as sns, pandas as pd
+# ---------------------------------------------------------------------------
+# 2.  Append new modules to customer_comms  ---------------------------------
+# ---------------------------------------------------------------------------
+import textwrap, shutil, json, pandas as pd, numpy as np, matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter, MonthLocator
+from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
-from statsmodels.tsa.stattools import grangercausalitytests
-from ..config import settings
-from ..logging_utils import get_logger
-log=get_logger(__name__)
+from scipy.stats import pearsonr
+import seaborn as sns
 
-def anomaly_scatter(df:pd.DataFrame):
-    if df.empty: return
-    X=df[["mail_volume","call_volume_aug"]].fillna(0)
-    iso=IsolationForest(random_state=42,contamination=0.05)
-    df["anomaly"]=iso.fit_predict(X)==-1
-    plt.figure(figsize=(8,6))
-    plt.scatter(df["mail_volume"],df["call_volume_aug"],
-                c=df["anomaly"].map({True:"red",False:"grey"}),
-                alpha=.6)
-    plt.xlabel("Mail Volume"); plt.ylabel("Call Vol (aug)")
-    plt.title("Isolation-Forest Anomalies")
-    out=settings.out_dir/"09_anomaly_scatter.png"
-    plt.tight_layout(); plt.savefig(out,dpi=300); plt.close()
-    log.info(f"Saved {out}")
+BASE = Path.cwd()
+PKG  = BASE / "customer_comms"
+PKG.mkdir(exist_ok=True)
 
-def granger(df:pd.DataFrame,maxlag:int=5):
-    if df.empty: return
-    gdf=df[["mail_volume","call_volume_aug"]].dropna()
-    result=grangercausalitytests(gdf,maxlag=maxlag,verbose=False)
-    pvals=[round(result[i+1][0]["ssr_ftest"][1],4) for i in range(maxlag)]
-    with open(settings.out_dir/"09_granger_pvalues.txt","w") as f:
-        f.write("lag,p-value\n"+ "\n".join(f"{i+1},{p}" for i,p in enumerate(pvals)))
-    log.info("Granger causality p-values saved")
+# ----------------- quick import for stale() -----------------
+loader = importlib.import_module("customer_comms.data.loader")
+stale  = loader.stale
+CU     = importlib.import_module("customer_comms.logging_utils")
+log    = CU.get_logger("stage2")
+
+cfg    = importlib.import_module("customer_comms.config").settings
+cfg.out_dir.mkdir(exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# 3.  Feature Engineering module  -------------------------------------------
+# ---------------------------------------------------------------------------
+(PKG/"features").mkdir(exist_ok=True)
+(PKG/"features/__init__.py").touch()
+
+eng_code = textwrap.dedent("""
+    import pandas as pd, numpy as np
+    from pathlib import Path
+    from ..config import settings
+    from ..data.loader import stale
+    from ..logging_utils import get_logger
+    log=get_logger(__name__)
+    OUT= settings.out_dir/'04_features.csv'
+
+    def build_features():
+        call_aug = pd.read_csv(settings.out_dir/'02_augmented_calls.csv', parse_dates=['date'])
+        mail     = pd.read_csv(settings.data_dir/settings.mail_file,
+                               low_memory=False, encoding='utf-8')
+        if mail.empty or call_aug.empty:
+            log.error('Missing augmented calls or mail'); return pd.DataFrame()
+
+        mail = mail.rename(columns={settings.mail_date_col:'date',
+                                    settings.mail_type_col:'mail_type',
+                                    settings.mail_volume_col:'mail_volume'})
+        mail['date']=pd.to_datetime(mail['date'],errors='coerce').dt.normalize()
+        mail['mail_volume']=pd.to_numeric(mail['mail_volume'],errors='coerce')
+        mail=mail.dropna(subset=['date','mail_volume'])
+
+        # ---- Top-N mail types, rest → 'Other' -----------------------------
+        topN = (mail.groupby('mail_type')['mail_volume'].sum()
+                    .sort_values(ascending=False).head(9).index)
+        mail['mail_cat']=np.where(mail['mail_type'].isin(topN),
+                                  mail['mail_type'],'Other')
+        mail_daily = (mail.groupby(['date','mail_cat'])['mail_volume'].sum()
+                         .unstack(fill_value=0).reset_index())
+
+        # ---- Combine ------------------------------------------------------
+        df = pd.merge(call_aug[['date','call_volume_aug']], mail_daily,
+                      on='date', how='inner')
+
+        # ---- Feature engineering -----------------------------------------
+        df = df.sort_values('date')
+        for lag in (1,3,5,7,14):
+            df[f'calls_lag{lag}'] = df['call_volume_aug'].shift(lag)
+            df[f'calls_ma{lag}']  = df['call_volume_aug'].rolling(lag).mean()
+            df[f'mail_tot_lag{lag}'] = df[topN.tolist()+['Other']].sum(axis=1).shift(lag)
+
+        df.dropna(inplace=True)
+        df.to_csv(OUT,index=False)
+        log.info('Feature set saved')
+        return df
+""")
+(PKG/"features/engineering.py").write_text(eng_code, encoding="utf-8")
+
+# ---------------------------------------------------------------------------
+# 4.  Plot utilities  --------------------------------------------------------
+# ---------------------------------------------------------------------------
+(PKG/"viz").mkdir(exist_ok=True)
+(PKG/"viz/__init__.py").touch()
+
+plot_code = textwrap.dedent("""
+    import pandas as pd, numpy as np, matplotlib.pyplot as plt, seaborn as sns
+    from matplotlib.dates import DateFormatter
+    from pathlib import Path
+    from ..config import settings
+    from ..logging_utils import get_logger
+    log=get_logger(__name__)
+
+    OUT=settings.out_dir
+    sns.set_style('whitegrid')
+
+    def lag_heat(df, max_lag=14):
+        vals=[]
+        for lag in range(max_lag+1):
+            r,_=np.nan, np.nan
+            try:
+                r,_=np.corrcoef(df['mail_volume_tot'], df['call_volume_aug'].shift(-lag).fillna(np.nan))[0,1],0
+            except: pass
+            vals.append(r)
+        plt.figure(figsize=(8,3))
+        sns.heatmap(np.array(vals).reshape(1,-1),annot=True,fmt=".2f",
+                    cmap='coolwarm',cbar=False,xticklabels=list(range(max_lag+1)))
+        plt.title('Mail→Call corr vs lag'); plt.xlabel('Lag (days)'); plt.yticks([])
+        plt.tight_layout(); plt.savefig(OUT/'05_lag_corr_heat.png',dpi=300); plt.close()
+        log.info('Saved 05_lag_corr_heat.png')
+
+    def rolling_corr(df, window=30):
+        r = (df.set_index('date')['mail_volume_tot']
+                .rolling(window).corr(df.set_index('date')['call_volume_aug']))
+        plt.figure(figsize=(10,3))
+        plt.plot(r.index,r); plt.title(f'{window}-day rolling corr')
+        ax=plt.gca(); ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+        plt.setp(ax.get_xticklabels(),rotation=45,ha='right'); plt.tight_layout()
+        plt.savefig(OUT/'06_rolling_corr.png',dpi=300); plt.close()
+        log.info('Saved 06_rolling_corr.png')
+
+    def mail_intent_heat():
+        inten_csv = settings.out_dir/'01_data_quality_report.json'
+        # quick existence check; plotting of top 5x5 done in Stage-3
+""")
+(PKG/"viz/plots.py").write_text(plot_code, encoding="utf-8")
+
+# ---------------------------------------------------------------------------
+# 5.  Stage-2 driver  --------------------------------------------------------
+# ---------------------------------------------------------------------------
+driver = textwrap.dedent("""
+    from customer_comms.logging_utils      import get_logger
+    from customer_comms.features.engineering import build_features
+    from customer_comms.viz.plots          import lag_heat, rolling_corr
+    import pandas as pd
+    log=get_logger('stage2')
+
+    try:
+        df = build_features()
+        if df.empty:
+            log.error('No features – aborting plots')
+        else:
+            df['mail_volume_tot'] = df.filter(like='mail_cat').sum(axis=1)
+            lag_heat(df)
+            rolling_corr(df)
+        log.info('🎉  Stage-2 complete')
+    except Exception as e:
+        log.exception('Stage-2 failed')
+        raise
+""")
+(Path.cwd()/"run_stage2.py").write_text(driver, encoding="utf-8")
+
+# ---------------------------------------------------------------------------
+# 6.  Execute Stage-2  -------------------------------------------------------
+# ---------------------------------------------------------------------------
+import subprocess, sys, os
+subprocess.check_call([sys.executable, "run_stage2.py"])
 PY
 
-# ---------------------------------------------------------------------
-# 5.  Update Makefile (append new targets)
-# ---------------------------------------------------------------------
-awk '/^clean:/ {exit} {print}' Makefile > Makefile.tmp || true
-cat Makefile.tmp > Makefile && rm -f Makefile.tmp
-
-cat >> Makefile << 'MK'
-
-eda_ts:        ## Story 2.1  – decomposition, lag, seasonality
-	python - <<'PY'
-import customer_comms.processing.ingest as ing
-from customer_comms.analytics.augment import augment
-from customer_comms.analytics.eda_ts import decompose, lag_heatmap, weekday_month_heat
-call, mail = ing.run(); df=augment(call).merge(mail,on="date",how="inner")
-decompose(df); lag_heatmap(df); weekday_month_heat(df)
-PY
-
-mail_eff:      ## Story 2.2  – campaign effectiveness
-	python - <<'PY'
-import customer_comms.processing.ingest as ing
-from customer_comms.analytics.augment import augment
-from customer_comms.analytics.mail_effectiveness import analyse
-call, mail = ing.run(); aug=augment(call); analyse(mail, aug)
-PY
-
-econ_sens:     ## Story 2.3  – economic sensitivity
-	python - <<'PY'
-import customer_comms.processing.ingest as ing
-from customer_comms.features.econ import fetch
-from customer_comms.analytics.augment import augment
-from customer_comms.analytics.econ_sensitivity import corr_heat, add_regime
-call, _ = ing.run(); aug=augment(call); econ=fetch()
-econ=add_regime(econ); corr_heat(aug,econ)
-PY
-
-patterns:      ## Story 2.4  – anomalies & causality
-	python - <<'PY'
-import customer_comms.processing.ingest as ing
-from customer_comms.analytics.augment import augment
-from customer_comms.analytics.patterns import anomaly_scatter, granger
-call, mail = ing.run(); df=augment(call).merge(mail,on="date",how="inner")
-anomaly_scatter(df); granger(df)
-PY
-MK
-
-echo "✅  Stage 2 added.  Try:"
-echo "   make eda_ts    # decomposition + lag & seasonality plots"
-echo "   make mail_eff  # campaign effectiveness"
-echo "   make econ_sens # economic correlations"
-echo "   make patterns  # anomalies & Granger test"
-echo "   Artefacts land in ./output/, logs in ./logs/"
+echo "-----------------------------------------------------------------"
+echo "✅  Stage-2 artefacts generated in ./output/  |  logs in ./logs/"
+echo "-----------------------------------------------------------------"

@@ -1,0 +1,127 @@
+$ ./all.sh
+==============================================================================
+ STEP 0 – Install / verify Python dependencies 
+==============================================================================
+✔  pandas
+✔  numpy
+✔  matplotlib
+✔  seaborn
+… installing scikit-learn
+✔  scipy
+✔  holidays
+✔  yfinance
+✔  pydantic
+✔  pydantic-settings
+==============================================================================
+ STEP 1 – Create package skeleton (explicit mkdir / touch for each dir) 
+==============================================================================
+==============================================================================
+ STEP 2 – Write customer_comms/config.py 
+==============================================================================
+==============================================================================
+ STEP 3 – Write utils/logging_utils.py
+==============================================================================
+==============================================================================
+ STEP 4 – Write utils/io.py (multi-encoding CSV reader)
+==============================================================================
+==============================================================================
+ STEP 5 – Write data/loader.py
+==============================================================================
+==============================================================================
+ STEP 6 – Write processing/combine.py
+==============================================================================
+==============================================================================
+ STEP 7 – Write viz/plots.py
+==============================================================================
+==============================================================================
+ STEP 8 – Write analytics/corr_extras.py
+==============================================================================
+==============================================================================
+ STEP 9 – Write analytics/mail_intent_corr.py
+==============================================================================
+==============================================================================
+ STEP 10 – Write models/baseline.py
+==============================================================================
+==============================================================================
+ STEP 11 – Write run_stage1.py … run_stage4.py
+==============================================================================
+==============================================================================
+ STEP 12 – Write run_pipeline.py (master orchestrator)
+==============================================================================
+==============================================================================
+ STEP 13 – Copy CSVs from ./data/ to package data/ if present
+==============================================================================
+==============================================================================
+ STEP 14 – Execute all four stages in order
+==============================================================================
+2025-07-13 18:04:53 | INFO    | __main__ | 🏁  Running Stage-1 …
+2025-07-13 18:04:56 | INFO    | customer_comms.run_stage1 | Stage-1  –  Basic QA and raw visualisations
+2025-07-13 18:04:57 | INFO    | customer_comms.data.loader | Call volume rows: 550
+2025-07-13 18:04:58 | INFO    | customer_comms.data.loader | Mail rows: 1409780
+2025-07-13 18:05:02 | INFO    | customer_comms.data.loader | Intent matrix shape: (104, 32)
+C:\Users\BhungarD\OneDrive - Computershare\Desktop\o3\customer_comms\processing\combine.py:26: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.  
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  merged["call_volume"].fillna(merged["intent_cnt"] * scale, inplace=True)
+YF.download() has changed argument auto_adjust default to True
+2025-07-13 18:05:02 | INFO    | customer_comms.data.loader | VIX rows: 503
+2025-07-13 18:05:03 | INFO    | customer_comms.data.loader | SP500 rows: 502
+
+1 Failed download:
+['FEDFUNDS']: HTTPError('HTTP Error 404: ')
+2025-07-13 18:05:03 | ERROR   | customer_comms.data.loader | FEDFUNDS download failed: yfinance empty
+2025-07-13 18:05:03 | INFO    | customer_comms.processing.combine | Master frame rows: 349
+2025-07-13 18:05:04 | INFO    | customer_comms.viz.plots | Saved overview.png
+2025-07-13 18:05:05 | INFO    | customer_comms.data.loader | Call volume rows: 550
+2025-07-13 18:05:08 | INFO    | customer_comms.data.loader | Intent matrix shape: (104, 32)
+2025-07-13 18:05:09 | INFO    | customer_comms.viz.plots | Saved raw_call_files.png
+2025-07-13 18:05:10 | INFO    | customer_comms.data.loader | Call volume rows: 550
+2025-07-13 18:05:10 | INFO    | customer_comms.data.loader | Mail rows: 1409780
+2025-07-13 18:05:11 | INFO    | customer_comms.viz.plots | Saved data_gaps.png
+2025-07-13 18:05:12 | INFO    | customer_comms.data.loader | Call volume rows: 550
+2025-07-13 18:05:13 | INFO    | customer_comms.data.loader | Mail rows: 1409780
+2025-07-13 18:05:13 | INFO    | customer_comms.viz.plots | Saved qa_summary.json
+2025-07-13 18:05:13 | INFO    | __main__ | 🏁  Running Stage-2 …
+2025-07-13 18:05:13 | INFO    | customer_comms.run_stage2 | Stage-2  –  Correlation heat / rolling / variants
+2025-07-13 18:05:14 | INFO    | customer_comms.data.loader | Call volume rows: 550
+2025-07-13 18:05:15 | INFO    | customer_comms.data.loader | Mail rows: 1409780
+2025-07-13 18:05:19 | INFO    | customer_comms.data.loader | Intent matrix shape: (104, 32)
+C:\Users\BhungarD\OneDrive - Computershare\Desktop\o3\customer_comms\processing\combine.py:26: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.  
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  merged["call_volume"].fillna(merged["intent_cnt"] * scale, inplace=True)
+Exception ignored in: <function Image.__del__ at 0x00000127DF1B3EC0>
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\tkinter\__init__.py", line 4242, in __del__
+    self.tk.call('image', 'delete', self.name)
+RuntimeError: main thread is not in main loop
+Exception ignored in: <function Variable.__del__ at 0x00000127DF110CC0>
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\tkinter\__init__.py", line 414, in __del__
+    if self._tk.getboolean(self._tk.call("info", "exists", self._name)):
+RuntimeError: main thread is not in main loop
+Exception ignored in: <function Variable.__del__ at 0x00000127DF110CC0>
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\tkinter\__init__.py", line 414, in __del__
+    if self._tk.getboolean(self._tk.call("info", "exists", self._name)):
+RuntimeError: main thread is not in main loop
+Exception ignored in: <function Variable.__del__ at 0x00000127DF110CC0>
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\tkinter\__init__.py", line 414, in __del__
+    if self._tk.getboolean(self._tk.call("info", "exists", self._name)):
+RuntimeError: main thread is not in main loop
+Exception ignored in: <function Variable.__del__ at 0x00000127DF110CC0>
+Traceback (most recent call last):
+  File "C:\Users\BhungarD\Lib\tkinter\__init__.py", line 414, in __del__
+    if self._tk.getboolean(self._tk.call("info", "exists", self._name)):
+RuntimeError: main thread is not in main loop
+Tcl_AsyncDelete: async handler deleted by the wrong thread
+❌  Top-level failure – see logs/
+
+✅  ALL DONE.  Plots & JSON in  ./customer_comms/output/  –  Logs in ./logs/

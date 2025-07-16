@@ -1,0 +1,82 @@
+<?xml version="1.0" ?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Genesys Bot Solution">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Microsoft Teams
+(Chat UI)" style="shape=ellipse;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="20" y="100" width="160" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="Azure Bot Service
+(Message Routing)" style="shape=rectangle;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="220" y="100" width="180" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="Bot Logic
+(App Service or Function)" style="shape=rectangle;fillColor=#f8cecc;" vertex="1" parent="1">
+          <mxGeometry x="460" y="100" width="200" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="Genesys Knowledge API" style="shape=cloud;fillColor=#fff2cc;" vertex="1" parent="1">
+          <mxGeometry x="460" y="10" width="160" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Azure OpenAI (GPT)" style="shape=cloud;fillColor=#fff2cc;" vertex="1" parent="1">
+          <mxGeometry x="700" y="10" width="160" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Compose Response
+(LLM + KB Content)" style="shape=rectangle;fillColor=#e1d5e7;" vertex="1" parent="1">
+          <mxGeometry x="600" y="180" width="200" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Response to Teams" style="shape=ellipse;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="220" y="260" width="160" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="Azure Key Vault
+(Optional Secrets Store)" style="shape=cylinder;fillColor=#f5f5f5;" vertex="1" parent="1">
+          <mxGeometry x="700" y="100" width="160" height="60" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="" edge="1" source="2" target="3" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="" edge="1" source="3" target="4" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="OAuth2 + KB Query" edge="1" source="4" target="5" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="Context + Query" edge="1" source="4" target="6" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="Article Content" edge="1" source="5" target="7" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="LLM Output" edge="1" source="6" target="7" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e7" value="Final Response" edge="1" source="7" target="8" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="Secrets Access" edge="1" source="4" target="9" parent="1">
+          <mxGeometry relative="1" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t1" value="User sends a message via Teams" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="20" y="180" width="300" height="40" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t2" value="Bot Service forwards message to your hosted bot" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="220" y="180" width="300" height="40" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t3" value="Bot authenticates with Genesys &amp; retrieves KB articles" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="460" y="180" width="300" height="40" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t4" value="Context and question are sent to Azure OpenAI" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="700" y="180" width="300" height="40" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t5" value="LLM composes a helpful answer" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="600" y="250" width="300" height="40" as_="geometry"/>
+        </mxCell>
+        <mxCell id="t6" value="Bot responds back to the user in Teams" style="text;html=1;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1">
+          <mxGeometry x="220" y="340" width="300" height="40" as_="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
